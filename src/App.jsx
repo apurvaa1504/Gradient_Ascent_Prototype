@@ -15,7 +15,7 @@ import {
   getSatelliteInputs,
   DEPTHS
 } from './simulation';
-import { worldLandGeoJSON } from './geoData';
+import { worldLandGeoJSON, isLandCoordinate } from './geoData';
 
 // ─── Copernicus Magma/Inferno Continuous Palette ─────────────────────────────
 const MAGMA_STOPS = [
@@ -225,11 +225,13 @@ function OceanEmbedProbeCard({ probe, screenPos, depth, year, dayOfYear, forecas
     return `${lonStr}, ${latStr}`;
   }, [probe]);
 
+  const isLand = useMemo(() => isLandCoordinate(probe.lat, probe.lon), [probe.lat, probe.lon]);
+
   // Position card intelligently right next to the clicked pin point on the viewport
   const cardStyle = useMemo(() => {
     if (!screenPos) return { top: '80px', left: '38%' };
     const cardW = 340;
-    const cardH = 460;
+    const cardH = isLand ? 360 : 460;
     const pad = 16;
     
     let left = screenPos.x + 14;
@@ -248,9 +250,74 @@ function OceanEmbedProbeCard({ probe, screenPos, depth, year, dayOfYear, forecas
       top: `${top}px`,
       left: `${left}px`
     };
-  }, [screenPos]);
+  }, [screenPos, isLand]);
 
   const CW = 290, CH = 90;
+
+  if (isLand) {
+    return (
+      <div
+        style={cardStyle}
+        className="absolute z-[1150] w-[340px] bg-[#0c1017]/95 backdrop-blur-xl text-white rounded-xl shadow-2xl border border-white/20 overflow-hidden font-sans select-none animate-in fade-in zoom-in-95 duration-150"
+      >
+        {/* ── CARD HEADER: Coordinates & Close Only ── */}
+        <div className="px-3.5 py-2.5 bg-gradient-to-r from-white/[0.06] to-transparent border-b border-white/10 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-cyan-400" />
+            <span className="text-[13px] font-mono font-bold text-gray-100 tracking-wider">
+              {formattedCoord}
+            </span>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-white transition-colors p-1 rounded-md hover:bg-white/10"
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        {/* ── LIVE PRIMARY TELEMETRY BAR: thetao — °C ── */}
+        <div className="px-3.5 pt-2.5 pb-2 bg-white/[0.02] flex items-center justify-between border-b border-white/[0.08]">
+          <div className="text-[14px] font-mono text-gray-200">
+            thetao <span className="text-gray-400 ml-4">— °C</span>
+          </div>
+        </div>
+
+        {/* ── LAND NO DATA PANELS (Matching Reference Screenshot) ── */}
+        <div className="p-3.5 space-y-3">
+          {/* Panel 1: thetao / No data */}
+          <div className="relative h-20 border-l border-b border-amber-400/80 bg-black/40 px-2 py-1 flex flex-col justify-between">
+            <span className="text-[12px] font-mono text-gray-200">thetao</span>
+            <div className="absolute inset-0 flex items-center justify-center text-[13px] font-medium text-gray-300 pointer-events-none">
+              No data
+            </div>
+            <span className="self-end text-[11px] font-mono text-gray-300">t</span>
+          </div>
+
+          {/* Panel 2: h thetao / No data */}
+          <div className="relative h-20 border-l border-b border-amber-400/80 bg-black/40 px-2 py-1 flex flex-col justify-between">
+            <div className="flex justify-between items-center text-[12px] font-mono text-gray-200">
+              <span>h</span>
+              <span className="mr-2">thetao</span>
+            </div>
+            <div className="absolute inset-0 flex items-center justify-center text-[13px] font-medium text-gray-300 pointer-events-none">
+              No data
+            </div>
+            <div className="h-2" />
+          </div>
+
+          {/* Panel 3: h - thetao / No data */}
+          <div className="relative h-20 border-l border-b border-amber-400/80 bg-black/40 px-2 py-1 flex flex-col justify-between">
+            <span className="text-[12px] font-mono text-gray-200">h – thetao</span>
+            <div className="absolute inset-0 flex items-center justify-center text-[13px] font-medium text-gray-300 pointer-events-none">
+              No data
+            </div>
+            <span className="self-end text-[11px] font-mono text-gray-300">t</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -609,10 +676,12 @@ export default function App() {
     return () => clearInterval(id);
   }, [isPlaying]);
 
-  const probeSST = useMemo(() =>
-    getMockTemperature(probe.lat, probe.lon, depth, year, dayOfYear, forecastDays),
-    [probe, depth, year, dayOfYear, forecastDays]
-  );
+  const isProbeLand = useMemo(() => isLandCoordinate(probe.lat, probe.lon), [probe.lat, probe.lon]);
+
+  const probeSST = useMemo(() => {
+    if (isProbeLand) return null;
+    return getMockTemperature(probe.lat, probe.lon, depth, year, dayOfYear, forecastDays);
+  }, [probe, depth, year, dayOfYear, forecastDays, isProbeLand]);
 
   const TOOLS = [
     { id: 'point', icon: MousePointer, label: 'Point probe' },
@@ -949,10 +1018,12 @@ export default function App() {
         <span className="flex items-center gap-1 font-medium">
           🎯 {Math.abs(probe.lon).toFixed(3)}°{probe.lon >= 0 ? 'E' : 'W'}, {Math.abs(probe.lat).toFixed(3)}°{probe.lat >= 0 ? 'N' : 'S'}
         </span>
-        <span className="border-l border-white/15 pl-2.5 text-cyan-400">
-          {probe.lon > 80 ? 'Bay of Bengal' : 'Arabian Sea'}
-        </span>
-        {probeSST !== null && (
+        {!isProbeLand && (
+          <span className="border-l border-white/15 pl-2.5 text-cyan-400">
+            {probe.lon > 80 ? 'Bay of Bengal' : 'Arabian Sea'}
+          </span>
+        )}
+        {probeSST !== null && !isProbeLand && (
           <span className="border-l border-white/15 pl-2.5 text-fuchsia-400 font-semibold">
             {probeSST.toFixed(2)}°C
           </span>
