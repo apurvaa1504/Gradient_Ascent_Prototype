@@ -28,5 +28,18 @@
     "oxlint": "^1.79.0",
     "tailwindcss": "^4.3.3",
     "vite": "^8.2.2"
-  }
+  },
+  "description": "This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.",
+  "main": "vite.config.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/apurvaa1504/Gradient_Ascent_Prototype.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/apurvaa1504/Gradient_Ascent_Prototype/issues"
+  },
+  "homepage": "https://github.com/apurvaa1504/Gradient_Ascent_Prototype#readme"
 }

@@ -6,7 +6,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-
+data/*
 node_modules
 dist
 dist-ssr
@@ -22,3 +22,5 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+backend/data/glorys_thetao_arabiansea_2020_2022_regridded.nc
+backend/data/glorys_thetao_arabiansea_2020_2022_regridded.nc

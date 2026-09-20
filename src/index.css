@@ -1,6 +1,5 @@
-/* Third-party CSS imports MUST come first, before Tailwind */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "leaflet/dist/leaflet.css";
-
 @import "tailwindcss";
 
 /* Leaflet dark theme overrides */
@@ -36,9 +35,6 @@
 input[type=range] {
   accent-color: #0891b2;
 }
-
-/* Font import */
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 * {
   font-family: 'Outfit', system-ui, sans-serif;
