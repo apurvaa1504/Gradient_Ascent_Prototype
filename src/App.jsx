@@ -622,15 +622,6 @@ function OceanEmbedProbeCard({ probe, screenPos, depth, year, dayOfYear, forecas
           15-Depth Profile
         </button>
         <button
-          onClick={() => setActiveTab('defense')}
-          className={`flex-1 py-1.5 text-center transition-all ${activeTab === 'defense'
-            ? 'text-fuchsia-400 border-b-2 border-fuchsia-400 bg-fuchsia-500/10 font-bold'
-            : 'text-gray-400 hover:text-gray-200'
-            }`}
-        >
-          Sonic / SLD
-        </button>
-        <button
           onClick={() => setActiveTab('validation')}
           className={`flex-1 py-1.5 text-center transition-all ${activeTab === 'validation'
             ? 'text-emerald-400 border-b-2 border-emerald-400 bg-emerald-500/10 font-bold'
@@ -919,55 +910,6 @@ function OceanEmbedProbeCard({ probe, screenPos, depth, year, dayOfYear, forecas
               </div>
             </div>
           </>
-        )}
-
-        {/* ── TAB 2: DEFENSE INSIGHTS & SONIC LAYER DEPTH (SLD) ── */}
-        {activeTab === 'defense' && (
-          <div className="space-y-2">
-            <div className="p-2.5 rounded-lg bg-gradient-to-r from-fuchsia-950/60 to-purple-950/60 border border-fuchsia-500/30">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 text-fuchsia-300 font-bold text-[11px]">
-                  <Shield size={13} /> Sonic Layer Depth (SLD)
-                </div>
-                <span className="text-[13px] font-mono font-extrabold text-white bg-fuchsia-900/60 px-2 py-0.5 rounded border border-fuchsia-600/40">
-                  {profileData.sldDepth} meters
-                </span>
-              </div>
-              <div className="text-[9px] text-gray-300 mt-1 leading-relaxed">
-                Max sound speed duct is at <strong>{profileData.sldDepth}m</strong> ({profileData.maxSoundSpeed} m/s). Essential for Navy sonar propagation & shadow-zone submarine detection.
-              </div>
-            </div>
-
-            {/* Sound Velocity Profile C(z) */}
-            <div className="bg-[#090c12] p-2 rounded-lg border border-white/[0.08]">
-              <div className="flex justify-between items-center text-[10px] font-mono text-gray-400 mb-1">
-                <span className="text-fuchsia-300 font-semibold">Sound Speed Profile C(z)</span>
-                <span className="text-[9px] text-gray-500">Mackenzie (1981)</span>
-              </div>
-              <svg width={CW} height={CH} className="overflow-visible">
-                {[0, 200, 500, 1000].map(d => {
-                  const y = (d / 1000) * CH;
-                  return (
-                    <g key={d}>
-                      <line x1={0} y1={y} x2={CW - 32} y2={y} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
-                      <text x={CW - 4} y={y + 3} fill="#6b7280" fontSize={8} textAnchor="end" fontFamily="monospace">
-                        {d}m
-                      </text>
-                    </g>
-                  );
-                })}
-                {(() => {
-                  const pts = profileData.depths.map((d, i) => {
-                    const speed = profileData.soundSpeed[i];
-                    const x = ((speed - 1490) / 50) * (CW - 32);
-                    const y = (d / 1000) * CH;
-                    return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
-                  }).join(' ');
-                  return <path d={pts} fill="none" stroke="#d946ef" strokeWidth={2} />;
-                })()}
-              </svg>
-            </div>
-          </div>
         )}
 
         {/* ── TAB 3: BOA-ARGO IN-SITU VALIDATION ── */}
