@@ -14,6 +14,7 @@ import {
 } from './simulation';
 import { worldLandGeoJSON, isLandCoordinate } from './geoData';
 import { fetchInferencePrediction } from './apiClient';
+import TchpPage from './TchpPage.jsx';
 
 // ─── Copernicus Magma/Inferno Continuous Palette ─────────────────────────────
 const MAGMA_STOPS = [
@@ -1067,7 +1068,7 @@ function OceanEmbedProbeCard({ probe, screenPos, depth, year, dayOfYear, forecas
 }
 
 // ─── Main Application Component ───────────────────────────────────────────────
-export default function App() {
+function OceanMapApp({ onNavigateToTchp }) {
   const [probe, setProbe] = useState({ lat: 14.5, lon: 70.0 });
   const [screenPos, setScreenPos] = useState({ x: 450, y: 220 });
   const [depth, setDepth] = useState(0);
@@ -1221,6 +1222,12 @@ export default function App() {
             <Anchor size={10} />
             OTEC Intelligence Platform
           </Link>
+          <button
+            onClick={onNavigateToTchp}
+            className="ml-2 rounded border border-amber-400/40 bg-amber-400/10 px-2 py-1 text-[9px] font-bold text-amber-200 hover:bg-amber-400/20"
+          >
+            TCHP Intelligence
+          </button>
         </div>
       </div>
 
@@ -1432,3 +1439,26 @@ export default function App() {
     </div>
   );
 }
+
+
+export default function App() {
+  const [route, setRoute] = useState(window.location.pathname);
+
+  useEffect(() => {
+    const handlePopState = () => setRoute(window.location.pathname);
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const navigate = (path) => {
+    window.history.pushState({}, '', path);
+    setRoute(path);
+  };
+
+  if (route === '/tchp' || route === '/tchp-intelligence') {
+    return <TchpPage onBack={() => navigate('/')} />;
+  }
+
+  return <OceanMapApp onNavigateToTchp={() => navigate('/tchp')} />;
+}
+
