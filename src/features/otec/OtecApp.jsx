@@ -2,10 +2,11 @@ import React, { useState, useMemo } from 'react';
 import { otecTheme } from './otec-theme';
 import { SectionCard, KpiCard, ThresholdBar, StatusBadge, InfoTooltip } from './components/SharedComponents';
 import { Activity, Download, Calendar, MapPin, Clock, Thermometer, Zap, Droplets, Map, TrendingUp, TrendingDown } from 'lucide-react';
-import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, ReferenceLine, ReferenceArea, Tooltip as RechartsTooltip, ResponsiveContainer, ComposedChart, ReferenceDot } from 'recharts';
+import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, ReferenceLine, ReferenceArea, Tooltip as RechartsTooltip, ResponsiveContainer, ComposedChart, ReferenceDot, Bar } from 'recharts';
 import { DAILY_FORECAST } from './mock-data/daily-forecast';
 import { SITES } from './mock-data/sites';
 import { DEPTH_PROFILE } from './mock-data/depth-profile';
+import { HISTORY_30DAY } from './mock-data/history-30day';
 
 export default function OtecApp() {
   const [activeTab, setActiveTab] = useState("Today's Operations");
@@ -17,6 +18,7 @@ export default function OtecApp() {
   const forecast7Days = DAILY_FORECAST[selectedSiteId];
   const todayForecast = forecast7Days[0];
   const profile = DEPTH_PROFILE[selectedSiteId][todayForecast.date];
+  const history30Day = HISTORY_30DAY[selectedSiteId];
 
   // State for Intake Depth (500, 700, 1000)
   const [intakeDepth, setIntakeDepth] = useState(1000);
@@ -463,6 +465,95 @@ export default function OtecApp() {
                     </div>
                   </div>
                 </SectionCard>
+             </div>
+
+             {/* Bottom Three Columns */}
+             <div className="grid grid-cols-3 gap-6">
+               {/* 1. Power and Water History */}
+               <SectionCard title="Power & Water History">
+                 <div className="h-[200px] w-full mt-2">
+                   <ResponsiveContainer width="100%" height="100%">
+                     <ComposedChart data={history30Day} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                       <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="rgba(255,255,255,0.05)" />
+                       <XAxis dataKey="date" tickFormatter={(d) => new Date(d).toLocaleDateString('en-GB', {day: 'numeric', month: 'short'})} tick={{fill: otecTheme.colors.textSecondary, fontSize: 10}} minTickGap={20} />
+                       <YAxis yAxisId="left" tick={{fill: '#2FB8C9', fontSize: 10}} />
+                       <YAxis yAxisId="right" orientation="right" tick={{fill: '#E0A82E', fontSize: 10}} />
+                       <RechartsTooltip 
+                         contentStyle={{ backgroundColor: '#122A3E', border: '1px solid rgba(255,255,255,0.1)', fontSize: '11px' }}
+                         labelFormatter={(l) => new Date(l).toLocaleDateString('en-GB', {day: 'numeric', month: 'short'})}
+                       />
+                       <Bar yAxisId="left" dataKey="freshwaterL" fill="#2FB8C9" opacity={0.6} radius={[2, 2, 0, 0]} name="Freshwater (L)" />
+                       <Line yAxisId="right" type="monotone" dataKey="grossPowerKw" stroke="#E0A82E" strokeWidth={2} dot={false} name="Power (kW)" />
+                       <ReferenceLine yAxisId="left" y={140000} stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" label={{ position: 'insideTopLeft', value: 'Target Demand', fill: 'rgba(255,255,255,0.5)', fontSize: 9 }} />
+                     </ComposedChart>
+                   </ResponsiveContainer>
+                 </div>
+               </SectionCard>
+
+               {/* 2. Thermal Risk Events */}
+               <SectionCard title="Thermal Risk Events">
+                 <div className="flex flex-col h-full gap-4 mt-2">
+                   {/* Horizontal Timeline */}
+                   <div className="relative w-full h-8 flex items-center">
+                     <div className="absolute w-full h-0.5 bg-white/10 top-1/2 -translate-y-1/2"></div>
+                     {/* Timeline Markers */}
+                     <div className="absolute w-3 h-3 rounded-full bg-[#E0524D] top-1/2 -translate-y-1/2 shadow-[0_0_8px_#E0524D]" style={{ left: '20%' }}>
+                       <span className="absolute top-4 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] text-[#9FB3C4]">12 Sep</span>
+                     </div>
+                     <div className="absolute w-3 h-3 rounded-full bg-[#E0A82E] top-1/2 -translate-y-1/2 shadow-[0_0_8px_#E0A82E]" style={{ left: '65%' }}>
+                       <span className="absolute top-4 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] text-[#9FB3C4]">28 Sep</span>
+                     </div>
+                   </div>
+                   
+                   {/* Risk List */}
+                   <ul className="flex flex-col gap-3 mt-4 text-[12px]">
+                     <li className="flex items-start gap-2">
+                       <div className="w-1.5 h-1.5 rounded-full bg-[#E0524D] mt-1.5 shrink-0"></div>
+                       <span style={{ color: otecTheme.colors.textSecondary }}>Cold eddy, 12 Sep: <span style={{ color: otecTheme.colors.textMain }}>ΔT dropped to 18.9°C for 2 days</span></span>
+                     </li>
+                     <li className="flex items-start gap-2">
+                       <div className="w-1.5 h-1.5 rounded-full bg-[#E0A82E] mt-1.5 shrink-0"></div>
+                       <span style={{ color: otecTheme.colors.textSecondary }}>Monsoon winds, 28 Sep: <span style={{ color: otecTheme.colors.textMain }}>Surface mixing lowered ΔT to 20.1°C</span></span>
+                     </li>
+                   </ul>
+                 </div>
+               </SectionCard>
+
+               {/* 3. Model Confidence */}
+               <SectionCard title="Model Confidence">
+                 <div className="flex flex-col h-full gap-4 mt-2">
+                   <div className="flex items-center gap-3">
+                     <StatusBadge status="good" label="HIGH CONFIDENCE" />
+                     <span className="text-[12px]" style={{ color: otecTheme.colors.textSecondary }}>Overall Score</span>
+                   </div>
+                   
+                   <div className="flex flex-col gap-3 text-[12px] mt-2">
+                     <div className="flex items-center justify-between">
+                       <span style={{ color: otecTheme.colors.textSecondary }}>0–30 m (Surface)</span>
+                       <div className="flex items-center gap-2">
+                         <span className="font-mono text-[#F2F6F8]">± 0.1°C</span>
+                         <div className="w-16 h-1.5 bg-[#3FBF7F]/30 rounded-full"><div className="w-full h-full bg-[#3FBF7F] rounded-full"></div></div>
+                       </div>
+                     </div>
+                     <div className="flex items-center justify-between">
+                       <span style={{ color: otecTheme.colors.textSecondary }}>500–1000 m (Deep)</span>
+                       <div className="flex items-center gap-2">
+                         <span className="font-mono text-[#F2F6F8]">± 0.3°C</span>
+                         <div className="w-16 h-1.5 bg-[#E0A82E]/30 rounded-full"><div className="w-3/4 h-full bg-[#E0A82E] rounded-full"></div></div>
+                       </div>
+                     </div>
+                   </div>
+                   
+                   <div className="mt-auto text-[11px] italic" style={{ color: otecTheme.colors.textSecondary }}>
+                     Forecast range is wider when the model has lower confidence.
+                   </div>
+                 </div>
+               </SectionCard>
+             </div>
+
+             {/* Disclaimer */}
+             <div className="w-full text-center text-[10px] py-4 mt-2 border-t border-white/5 text-[#9FB3C4]">
+               Indicative decision-support output derived from AI-reconstructed temperature profiles. Not a substitute for plant SCADA sensors, detailed engineering design, or safety controls.
              </div>
           </div>
         )}
