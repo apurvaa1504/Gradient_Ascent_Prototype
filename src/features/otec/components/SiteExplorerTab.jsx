@@ -3,8 +3,8 @@ import { MapContainer, TileLayer, Marker, Popup, CircleMarker, Tooltip, LayersCo
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { otecTheme } from '../otec-theme';
-import { SectionCard, StatusBadge } from './SharedComponents';
-import { MapPin, Filter, Layers, Database, Droplet, Ship, Check, Eye } from 'lucide-react';
+import { SectionCard, StatusBadge, InfoTooltip } from './SharedComponents';
+import { MapPin, Filter, Layers, Database, Droplet, Ship, Check, Eye, PlusCircle, ExternalLink, Thermometer, BarChart2 } from 'lucide-react';
 import { SITES } from '../mock-data/sites';
 
 // Fix for default leaflet icons not showing in React properly
@@ -31,7 +31,7 @@ const selectedIcon = new L.DivIcon({
   iconAnchor: [9, 9]
 });
 
-export default function SiteExplorerTab({ selectedSiteId, setSelectedSiteId }) {
+export default function SiteExplorerTab({ selectedSiteId, setSelectedSiteId, compareList = [], setCompareList }) {
   // Filters State
   const [region, setRegion] = useState('All');
   const [period, setPeriod] = useState('Last 1 Year');
@@ -45,9 +45,35 @@ export default function SiteExplorerTab({ selectedSiteId, setSelectedSiteId }) {
   
   // Map Layer selection
   const [activeLayer, setActiveLayer] = useState('deltaT');
+  const [toastMsg, setToastMsg] = useState(null);
+
+  const selectedSite = SITES.find(s => s.id === selectedSiteId) || SITES[0];
+
+  // Calculate ranking
+  const rankedSites = [...SITES].sort((a, b) => b.meanDeltaT - a.meanDeltaT);
+  const siteRank = rankedSites.findIndex(s => s.id === selectedSiteId) + 1;
+  const totalSites = SITES.length;
 
   const handleSiteClick = (id) => {
     setSelectedSiteId(id);
+  };
+
+  const handleAddToCompare = () => {
+    if (compareList.includes(selectedSite.id)) {
+      showToast(`${selectedSite.name} is already in comparison`);
+      return;
+    }
+    if (compareList.length >= 3) {
+      showToast('Maximum 3 sites can be compared');
+      return;
+    }
+    setCompareList([...compareList, selectedSite.id]);
+    showToast(`Added ${selectedSite.name} to comparison`);
+  };
+
+  const showToast = (msg) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3000);
   };
 
   // Mock Bathymetry contours (just a couple of polylines near Lakshadweep/Andaman)
@@ -73,8 +99,16 @@ export default function SiteExplorerTab({ selectedSiteId, setSelectedSiteId }) {
   ];
 
   return (
-    <div className="flex flex-col gap-6 h-full">
+    <div className="flex flex-col gap-6 h-full relative">
       
+      {/* Toast Notification */}
+      {toastMsg && (
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 z-[2000] bg-[#3FBF7F]/90 text-white px-4 py-2 rounded shadow-lg flex items-center gap-2 text-[13px] border border-white/20 transition-all">
+          <Check size={14} />
+          {toastMsg}
+        </div>
+      )}
+
       {/* Top Controls Row */}
       <div className="flex flex-wrap items-center gap-3 bg-[#122A3E] p-3 rounded-lg border border-white/10 shadow-sm text-[12px]">
         {/* Region */}
@@ -304,11 +338,105 @@ export default function SiteExplorerTab({ selectedSiteId, setSelectedSiteId }) {
           </SectionCard>
         </div>
 
-        {/* Right Panel Placeholder (Step 6) */}
-        <div className="col-span-4 h-full">
-           <SectionCard title="Site Feasibility Report">
-             <div className="flex items-center justify-center h-[550px] text-[#9FB3C4] text-[13px] border-2 border-dashed border-white/5 rounded-lg">
-                Right Panel (Step 6) will render here.
+        {/* Right Panel: Selected Site Snapshot */}
+        <div className="col-span-4 h-full flex flex-col gap-4">
+           <SectionCard title="Selected Site Snapshot">
+             <div className="flex flex-col gap-5">
+               {/* Header */}
+               <div className="flex justify-between items-start border-b border-white/10 pb-4">
+                 <div>
+                   <h3 className="text-[18px] font-bold text-white mb-1">{selectedSite.name}</h3>
+                   <div className="flex items-center gap-2 text-[12px] text-[#9FB3C4]">
+                     <MapPin size={12} /> {selectedSite.region}
+                     <span className="mx-1">•</span>
+                     <span>{selectedSite.lat.toFixed(2)}°N, {selectedSite.lon.toFixed(2)}°E</span>
+                   </div>
+                 </div>
+                 <div className="flex flex-col items-end">
+                   <div className="text-[22px] font-bold text-[#2FB8C9] font-mono leading-none">#{siteRank}</div>
+                   <div className="text-[10px] text-[#9FB3C4] uppercase tracking-wide mt-1">of {totalSites} Sites</div>
+                 </div>
+               </div>
+
+               {/* Key Metrics */}
+               <div className="grid grid-cols-2 gap-x-4 gap-y-5">
+                 <div>
+                   <div className="text-[11px] text-[#9FB3C4] uppercase tracking-wide mb-1">Thermal Gradient</div>
+                   <div className="flex items-baseline gap-1">
+                     <span className="text-[18px] font-mono text-white">{selectedSite.meanDeltaT.toFixed(1)}</span>
+                     <span className="text-[12px] text-[#9FB3C4]">°C mean</span>
+                   </div>
+                   <div className="text-[11px] text-[#E0524D] mt-0.5">Worst month: {selectedSite.worstMonthDeltaT.toFixed(1)}°C</div>
+                 </div>
+                 
+                 <div>
+                   <div className="text-[11px] text-[#9FB3C4] uppercase tracking-wide mb-1 flex items-center gap-1">Reliability <InfoTooltip text="% of days/year where ΔT is ≥ 20°C" /></div>
+                   <div className="flex items-baseline gap-1">
+                     <span className="text-[18px] font-mono text-white">{selectedSite.reliability}</span>
+                     <span className="text-[12px] text-[#9FB3C4]">%</span>
+                   </div>
+                   <div className="w-full h-1.5 bg-white/10 rounded-full mt-1.5">
+                     <div className="h-full bg-[#3FBF7F] rounded-full" style={{ width: `${selectedSite.reliability}%` }}></div>
+                   </div>
+                 </div>
+
+                 <div>
+                   <div className="text-[11px] text-[#9FB3C4] uppercase tracking-wide mb-1">Rec. Intake Depth</div>
+                   <div className="flex items-baseline gap-1">
+                     <span className="text-[18px] font-mono text-white">{selectedSite.recommendedIntakeDepth}</span>
+                     <span className="text-[12px] text-[#9FB3C4]">m</span>
+                   </div>
+                 </div>
+
+                 <div>
+                   <div className="text-[11px] text-[#9FB3C4] uppercase tracking-wide mb-1">Est. Pipe Route</div>
+                   <div className="flex items-baseline gap-1">
+                     <span className="text-[18px] font-mono text-white">{(selectedSite.pipeLengthMeters / 1000).toFixed(1)}</span>
+                     <span className="text-[12px] text-[#9FB3C4]">km</span>
+                   </div>
+                 </div>
+               </div>
+
+               {/* Indicative Output Box */}
+               <div className="bg-[#1A3347] border border-[#2FB8C9]/30 rounded-lg p-3">
+                 <div className="text-[11px] text-[#9FB3C4] mb-1 flex justify-between">
+                   <span>Scenario: {capacity} MW Plant</span>
+                   <span className="text-[#2FB8C9] font-mono">{selectedSite.meanDeltaT}°C base</span>
+                 </div>
+                 <div className="flex justify-between items-center mt-2">
+                   <div>
+                     <div className="text-[10px] uppercase text-[#9FB3C4]">Est. Net Power</div>
+                     <div className="text-[16px] font-bold text-white font-mono">{(capacity * ((selectedSite.meanDeltaT - 18) / 4)).toFixed(1)} <span className="text-[12px] font-normal text-[#9FB3C4]">MW</span></div>
+                   </div>
+                   <div className="w-px h-8 bg-white/10"></div>
+                   <div className="text-right">
+                     <div className="text-[10px] uppercase text-[#9FB3C4]">Freshwater Coproduct</div>
+                     <div className="text-[16px] font-bold text-white font-mono">{((capacity * ((selectedSite.meanDeltaT - 18) / 4)) * 105.5 / 1000).toFixed(1)} <span className="text-[12px] font-normal text-[#9FB3C4]">ML/day</span></div>
+                   </div>
+                 </div>
+               </div>
+               
+               {/* Environmental Flag */}
+               {selectedSite.environmentalFlag !== 'None' && (
+                 <div className="bg-[#E0A82E]/10 border border-[#E0A82E]/30 rounded p-2 text-[11px] flex gap-2">
+                   <div className="w-1.5 h-1.5 rounded-full bg-[#E0A82E] mt-1 shrink-0"></div>
+                   <span className="text-[#E0A82E] font-medium">{selectedSite.environmentalFlag}</span>
+                 </div>
+               )}
+
+               {/* Actions */}
+               <div className="flex gap-2 mt-2 pt-4 border-t border-white/10">
+                 <button className="flex-1 bg-white/5 hover:bg-white/10 text-white py-2 rounded text-[12px] font-medium flex items-center justify-center gap-1.5 transition-colors border border-white/10">
+                   <ExternalLink size={14} /> Open Full Analysis
+                 </button>
+                 <button 
+                   onClick={handleAddToCompare}
+                   className={`flex-1 py-2 rounded text-[12px] font-medium flex items-center justify-center gap-1.5 transition-colors ${compareList.includes(selectedSite.id) ? 'bg-[#3FBF7F]/20 text-[#3FBF7F] border border-[#3FBF7F]/30' : 'bg-[#2FB8C9] hover:bg-[#2FB8C9]/90 text-[#0B1B2B]'}`}
+                 >
+                   {compareList.includes(selectedSite.id) ? <Check size={14} /> : <PlusCircle size={14} />}
+                   {compareList.includes(selectedSite.id) ? 'Added' : 'Add to Compare'}
+                 </button>
+               </div>
              </div>
            </SectionCard>
         </div>

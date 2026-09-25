@@ -15,6 +15,7 @@ export default function OtecApp() {
 
   // Mock data for Tab 1
   const [selectedSiteId, setSelectedSiteId] = useState('kavaratti');
+  const [compareList, setCompareList] = useState([]);
   const siteInfo = SITES.find(s => s.id === selectedSiteId);
   const forecast7Days = DAILY_FORECAST[selectedSiteId];
   const todayForecast = forecast7Days[0];
@@ -560,7 +561,12 @@ export default function OtecApp() {
         )}
         
         {activeTab === "Site Explorer" && (
-          <SiteExplorerTab selectedSiteId={selectedSiteId} setSelectedSiteId={setSelectedSiteId} />
+          <SiteExplorerTab 
+            selectedSiteId={selectedSiteId} 
+            setSelectedSiteId={setSelectedSiteId} 
+            compareList={compareList}
+            setCompareList={setCompareList}
+          />
         )}
         
         {activeTab === "Future Site Ranking" && (
