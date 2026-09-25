@@ -14,6 +14,10 @@ import {
 import { worldLandGeoJSON, isLandCoordinate } from './geoData';
 import { fetchInferencePrediction } from './apiClient';
 import GlobalHeader from './features/otec/components/GlobalHeader.jsx';
+import { ThermoclinePFZLayer } from './ThermoclinePFZLayer.jsx';
+import { PFZPopup } from './PFZPopup.jsx';
+import { PFZLegend } from './PFZLegend.jsx';
+import { getPFZZones } from './pfzData.js';
 import './App.css';
 
 // ─── Copernicus Magma/Inferno Continuous Palette ─────────────────────────────
@@ -907,8 +911,8 @@ function OceanEmbedProbeCard({ probe, screenPos, depth, year, dayOfYear, forecas
                   {profileData.tchp} <span className="text-[10px] font-normal text-amber-400/80">kJ/cm²</span>
                 </div>
                 <span className={`text-[8px] font-bold px-1.5 py-0.2 rounded border inline-block ${profileData.tchp > 40
-                    ? 'bg-rose-950/80 text-rose-300 border-rose-700/60'
-                    : 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60'
+                  ? 'bg-rose-950/80 text-rose-300 border-rose-700/60'
+                  : 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60'
                   }`}>
                   {profileData.tchp > 40 ? 'High Cyclone Intensity Risk' : 'Low / Moderate Risk'}
                 </span>
@@ -1091,6 +1095,33 @@ function OceanMapApp() {
   const [inferenceLoading, setInferenceLoading] = useState(false);
   const [inferenceError, setInferenceError] = useState(null);
 
+  // ── Thermocline-Enhanced PFZ Layer State ─────────────────────────────────
+  const [showPFZLayer, setShowPFZLayer] = useState(false);
+  const [pfzZones, setPfzZones] = useState([]);
+  const [selectedPFZ, setSelectedPFZ] = useState(null);   // clicked zone object
+  const [pfzScreenPos, setPfzScreenPos] = useState(null); // pixel pos for popup
+
+  // Load PFZ zones when layer is toggled on (or forecast lead changes)
+  useEffect(() => {
+    if (!showPFZLayer) return;
+    getPFZZones(forecastDays).then(zones => setPfzZones(zones));
+  }, [showPFZLayer, forecastDays]);
+
+  // Handler: user clicks a PFZ polygon on the map
+  const handlePFZClick = useCallback((zone, latlng) => {
+    setSelectedPFZ(zone);
+    // Convert latlng to screen position — approximated; MapPositionTracker
+    // will refine it but we need an initial value synchronously.
+    // We store latlng so we can recompute if needed.
+    setPfzScreenPos({ lat: latlng.lat, lon: latlng.lng, needsMapConvert: true });
+  }, []);
+
+  // Dismiss PFZ popup
+  const closePFZPopup = useCallback(() => {
+    setSelectedPFZ(null);
+    setPfzScreenPos(null);
+  }, []);
+
   const callInference = useCallback(async (lat, lon) => {
     // Only call for ocean points within the model domain
     if (lat < 5 || lat > 30 || lon < 45 || lon > 105) return;
@@ -1166,6 +1197,13 @@ function OceanMapApp() {
           opacity={0.92}
         />
 
+        {/* Layer 2b: Thermocline-Enhanced PFZ Overlay (optional) */}
+        <ThermoclinePFZLayer
+          zones={pfzZones}
+          enabled={showPFZLayer}
+          onZoneClick={handlePFZClick}
+        />
+
         {/* Vector Land GeoJSON Mask */}
         <LandVectorMask />
 
@@ -1187,6 +1225,9 @@ function OceanMapApp() {
         {/* Map Mouse Move & Click Handler (Support Snap to 0.25° Grid) */}
         <MapMouseEvents
           onCoordClick={(lat, lon, point) => {
+            // If a PFZ popup is open, close it when clicking outside a zone
+            setSelectedPFZ(null);
+            setPfzScreenPos(null);
             setProbe({ lat, lon });
             setScreenPos(point);
             setShowProbeCard(true);
@@ -1203,39 +1244,39 @@ function OceanMapApp() {
 
       <GlobalHeader floating />
 
-      {/* ── TOP-LEFT LAYER CARD (Exact Copernicus Style) ── */}
-      <div className="layer-selector glass-card absolute top-[76px] left-4 z-[1100] w-72 bg-[#0c1017]/90 backdrop-blur-xl text-white rounded-xl shadow-2xl overflow-hidden border border-[#2FB8C9]/20">
-        <div className="flex items-center border-b border-white/10">
-          <button className="flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold text-[#2FB8C9] border-b-2 border-[#2FB8C9] bg-[#2FB8C9]/10">
-            <Plus size={12} /> Add layer…
+      {/* ── TOP-LEFT LAYER CARD (Copernicus Style - Enlarged) ── */}
+      <div className="layer-selector glass-card absolute top-[76px] left-4 z-[1100] w-96 bg-[#0c1017]/95 backdrop-blur-xl text-white rounded-xl shadow-2xl overflow-hidden border border-[#2FB8C9]/30">
+        <div className="flex items-center border-b border-white/10 px-1 py-0.5">
+          <button className="flex items-center gap-2 px-3.5 py-2.5 text-[12px] font-bold text-[#2FB8C9] border-b-2 border-[#2FB8C9] bg-[#2FB8C9]/10 rounded-t-sm">
+            <Plus size={14} /> Add layer…
           </button>
           <div className="flex-1" />
-          <button className="p-2 text-gray-400 hover:text-gray-700 transition-colors"><Search size={13} /></button>
-          <button className="p-2 text-gray-400 hover:text-gray-700 transition-colors"><Share2 size={13} /></button>
-          <button className="p-2 text-gray-400 hover:text-gray-700 transition-colors"><Info size={13} /></button>
+          <button className="p-2.5 text-gray-400 hover:text-white transition-colors"><Search size={15} /></button>
+          <button className="p-2.5 text-gray-400 hover:text-white transition-colors"><Share2 size={15} /></button>
+          <button className="p-2.5 text-gray-400 hover:text-white transition-colors"><Info size={15} /></button>
         </div>
 
-        <div className="px-3.5 pt-2.5 pb-1">
+        <div className="px-4 pt-3 pb-1.5">
           <div className="flex items-center justify-between">
-            <div className="text-[12px] font-bold text-gray-900 leading-tight">
+            <div className="text-[13px] font-bold text-gray-100 leading-tight">
               Sea water potential temperature (thetao)
             </div>
-            <Eye size={14} className="text-cyan-600 shrink-0" />
+            <Eye size={16} className="text-cyan-400 shrink-0 ml-2" />
           </div>
-          <div className="text-[10px] text-gray-500 font-medium mt-0.5">
+          <div className="text-[11px] text-gray-400 font-medium mt-1">
             {depth === 0 ? 'Surface (0m)' : `${depth}m depth`} · {year} · Daily 0.25° Grid
           </div>
         </div>
 
         {/* Magma Gradient Bar */}
-        <div className="px-3.5 pb-2 pt-1.5">
+        <div className="px-4 pb-2.5 pt-1.5">
           <div
-            className="w-full h-3.5 rounded-sm shadow-inner"
+            className="w-full h-4 rounded shadow-inner"
             style={{
               background: 'linear-gradient(to right, #0f0a28, #301258, #5c166e, #912664, #c84146, #f27332, #fdb955, #fefab4)'
             }}
           />
-          <div className="flex justify-between mt-1 text-[9px] text-gray-500 font-mono font-medium">
+          <div className="flex justify-between mt-1 text-[10px] text-gray-400 font-mono font-medium">
             <span>0°C</span>
             <span>5°C</span>
             <span>10°C</span>
@@ -1245,24 +1286,24 @@ function OceanMapApp() {
           </div>
         </div>
 
-        {/* Forecast Lead Selection Pill Buttons (Prominent & Larger) */}
-        <div className="px-3.5 py-2.5 bg-[#0B1B2B]/80 border-t border-b border-white/10 flex flex-col gap-2">
-          <div className="flex items-center justify-between text-[11px] font-bold text-gray-800">
+        {/* Forecast Lead Selection Pill Buttons */}
+        <div className="px-4 py-3 bg-[#0B1B2B]/90 border-t border-b border-white/10 flex flex-col gap-2.5">
+          <div className="flex items-center justify-between text-[12px] font-bold text-gray-200">
             <span>Forecast Lead Mode:</span>
             {forecastDays > 0 && (
-              <span className="text-[10px] font-mono text-cyan-700 bg-cyan-100 border border-cyan-300 px-1.5 py-0.2 rounded font-bold">
+              <span className="text-[11px] font-mono text-cyan-300 bg-cyan-950 border border-cyan-500/50 px-2 py-0.5 rounded font-bold">
                 +{forecastDays} Days Ahead
               </span>
             )}
           </div>
-          <div className="flex gap-1.5 flex-wrap">
-            {[0, 1, 2, 3, 7, 14].map(fDays => (
+          <div className="flex gap-2 flex-wrap">
+            {[0, 1, 2, 3].map(fDays => (
               <button
                 key={fDays}
                 onClick={() => setForecastDays(fDays)}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-mono font-bold transition-all shadow-sm ${forecastDays === fDays
-                    ? 'bg-[#2FB8C9] text-[#02040a] ring-2 ring-[#2FB8C9]/40 scale-105'
-                    : 'bg-[#122A3E] text-gray-200 hover:bg-[#2FB8C9]/20 border border-white/10'
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-mono font-bold transition-all shadow-sm ${forecastDays === fDays
+                  ? 'bg-[#2FB8C9] text-[#02040a] ring-2 ring-[#2FB8C9]/50 scale-105'
+                  : 'bg-[#122A3E] text-gray-200 hover:bg-[#2FB8C9]/20 border border-white/15'
                   }`}
               >
                 {fDays === 0 ? 'Now' : `+${fDays}d`}
@@ -1271,9 +1312,46 @@ function OceanMapApp() {
           </div>
         </div>
 
+        {/* ── THERMOCLINE-ENHANCED POTENTIAL FISHING ZONES LAYER TOGGLE (ENLARGED) ── */}
+        <div className="p-3.5 border-t border-white/10 bg-gradient-to-b from-[#0c1a29]/90 to-[#07111c]/90">
+          <button
+            id="pfz-layer-toggle"
+            onClick={() => {
+              setShowPFZLayer(v => !v);
+              if (showPFZLayer) {
+                setSelectedPFZ(null);
+                setPfzScreenPos(null);
+              }
+            }}
+            className={`w-full flex items-center gap-3 rounded-xl p-3 transition-all border shadow-lg ${showPFZLayer
+              ? 'bg-amber-950/40 border-amber-500/70 shadow-amber-950/50 ring-1 ring-amber-500/40'
+              : 'bg-white/[0.04] border-white/15 hover:bg-white/[0.08]'
+              }`}
+          >
+            {/* Enlarged Checkbox indicator */}
+            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all ${showPFZLayer ? 'bg-amber-500 border-amber-400 text-black shadow-md' : 'border-gray-400 bg-black/30'
+              }`}>
+              {showPFZLayer && (
+                <svg width={12} height={12} viewBox="0 0 12 12" fill="none">
+                  <path d="M2 6l3 3 5-5" stroke="#000000" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+            </div>
+            <div className="text-left flex-1">
+              <div className={`text-[13px] font-extrabold leading-snug tracking-wide ${showPFZLayer ? 'text-amber-300' : 'text-gray-100'
+                }`}>
+                Thermocline-Enhanced Potential Fishing Zones
+              </div>
+              <div className="text-[10px] font-medium text-gray-400 mt-0.5 flex items-center gap-1.5">
+                <span>🐟 Subsurface Thermocline & Chlorophyll Intelligence</span>
+              </div>
+            </div>
+          </button>
+        </div>
+
         {/* Grid Opacity Slider */}
-        <div className="px-3.5 py-2.5 flex items-center gap-2 border-t border-white/10">
-          <span className="text-[10px] text-gray-600 font-bold shrink-0">Grid Opacity</span>
+        <div className="px-4 py-3 flex items-center gap-3 border-t border-white/10 bg-black/20">
+          <span className="text-[11px] text-gray-300 font-bold shrink-0">Grid Opacity</span>
           <input
             type="range"
             min="0.1"
@@ -1281,9 +1359,9 @@ function OceanMapApp() {
             step="0.05"
             value={gridOpacity}
             onChange={e => setGridOpacity(parseFloat(e.target.value))}
-            className="flex-1 h-1.5 accent-cyan-600 cursor-pointer"
+            className="flex-1 h-2 accent-cyan-500 cursor-pointer"
           />
-          <span className="text-[10px] font-mono font-bold text-gray-700 w-8 text-right">
+          <span className="text-[11px] font-mono font-bold text-cyan-300 w-10 text-right">
             {Math.round(gridOpacity * 100)}%
           </span>
         </div>
@@ -1303,6 +1381,19 @@ function OceanMapApp() {
           inferenceLoading={inferenceLoading}
         />
       )}
+
+      {/* ── PFZ DETAIL POPUP ── */}
+      {selectedPFZ && pfzScreenPos && (
+        <PFZPopup
+          zone={selectedPFZ}
+          screenPos={pfzScreenPos}
+          onClose={closePFZPopup}
+          depth={depth}
+        />
+      )}
+
+      {/* ── PFZ LEGEND ── */}
+      <PFZLegend visible={showPFZLayer} />
 
       {/* ── NORTH & SOUTH POLE BADGES ── */}
       <div className="absolute top-[76px] left-1/2 -translate-x-1/2 z-[1100] pointer-events-none">
@@ -1375,7 +1466,7 @@ function OceanMapApp() {
       </div>
 
       {/* ── COORDINATE & GRID HUD ── */}
-      <div className="absolute bottom-4 left-4 z-[1100] bg-[#0a0e1a]/90 border border-white/10 backdrop-blur-md rounded-lg px-3 py-1.5 font-mono text-[10px] text-gray-300 flex items-center gap-3 shadow-xl">
+      <div className="absolute bottom-4 left-4 z-[1100] bg-[#0a0e1a]/90 border border-white/10 backdrop-blur-md rounded-lg px-3 py-1.5 font-mono text-[10px] text-gray-300 flex flex-wrap items-center gap-3 shadow-xl">
         <span className="flex items-center gap-1.5 font-medium text-cyan-300">
           <Grid size={12} className="text-cyan-400" />
           🎯 Probe: {Math.abs(probe.lon).toFixed(3)}°{probe.lon >= 0 ? 'E' : 'W'}, {Math.abs(probe.lat).toFixed(3)}°{probe.lat >= 0 ? 'N' : 'S'}
@@ -1404,6 +1495,21 @@ function OceanMapApp() {
         {probeSST !== null && !isProbeLand && (
           <span className="border-l border-white/15 pl-2.5 text-fuchsia-400 font-semibold">
             {probeSST.toFixed(2)}°C
+          </span>
+        )}
+        {/* ── PFZ Probe Enhancement ─────────────────────────────────── */}
+        {selectedPFZ && (
+          <span className="border-l border-white/15 pl-2.5 flex items-center gap-2">
+            <span className="text-emerald-400 font-bold">🐟 {selectedPFZ.id}</span>
+            <span className="text-[9px] bg-emerald-950/80 text-emerald-300 border border-emerald-800/60 px-1.5 py-0.2 rounded font-bold uppercase">
+              {selectedPFZ.potential}
+            </span>
+            <span className="text-amber-300 hidden lg:inline">
+              Thermocline: {selectedPFZ.thermoclineDepth}m
+            </span>
+            <span className="text-green-300 hidden xl:inline">
+              Chl: {selectedPFZ.chlorophyll} mg/m³
+            </span>
           </span>
         )}
       </div>
