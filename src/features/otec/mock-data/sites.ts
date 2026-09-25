@@ -1,0 +1,106 @@
+export const SITES = [
+  {
+    id: 'kavaratti',
+    name: 'Kavaratti',
+    region: 'Lakshadweep',
+    lat: 10.56,
+    lon: 72.63,
+    meanDeltaT: 22.4,
+    worstMonthDeltaT: 20.8,
+    reliability: 98.5,
+    recommendedIntakeDepth: 1000,
+    pipeLengthMeters: 2800,
+    environmentalFlag: 'Coral Proximity - Route optimization required'
+  },
+  {
+    id: 'agatti',
+    name: 'Agatti',
+    region: 'Lakshadweep',
+    lat: 10.85,
+    lon: 72.18,
+    meanDeltaT: 22.2,
+    worstMonthDeltaT: 20.6,
+    reliability: 98.2,
+    recommendedIntakeDepth: 1000,
+    pipeLengthMeters: 3100,
+    environmentalFlag: 'None'
+  },
+  {
+    id: 'minicoy',
+    name: 'Minicoy',
+    region: 'Lakshadweep',
+    lat: 8.28,
+    lon: 73.04,
+    meanDeltaT: 22.8,
+    worstMonthDeltaT: 21.2,
+    reliability: 99.1,
+    recommendedIntakeDepth: 1000,
+    pipeLengthMeters: 2400,
+    environmentalFlag: 'None'
+  },
+  {
+    id: 'port-blair',
+    name: 'Port Blair',
+    region: 'Andaman',
+    lat: 11.66,
+    lon: 92.73,
+    meanDeltaT: 23.1,
+    worstMonthDeltaT: 21.4,
+    reliability: 99.5,
+    recommendedIntakeDepth: 800,
+    pipeLengthMeters: 2100,
+    environmentalFlag: 'High Marine Traffic'
+  },
+  {
+    id: 'havelock',
+    name: 'Swaraj Dweep (Havelock)',
+    region: 'Andaman',
+    lat: 11.97,
+    lon: 92.98,
+    meanDeltaT: 23.0,
+    worstMonthDeltaT: 21.1,
+    reliability: 99.2,
+    recommendedIntakeDepth: 900,
+    pipeLengthMeters: 2300,
+    environmentalFlag: 'Coral Proximity'
+  },
+  {
+    id: 'car-nicobar',
+    name: 'Car Nicobar',
+    region: 'Nicobar',
+    lat: 9.16,
+    lon: 92.77,
+    meanDeltaT: 23.5,
+    worstMonthDeltaT: 21.8,
+    reliability: 99.8,
+    recommendedIntakeDepth: 850,
+    pipeLengthMeters: 1900,
+    environmentalFlag: 'None'
+  },
+  {
+    id: 'candidate-a',
+    name: 'Candidate Island A',
+    region: 'Lakshadweep',
+    lat: 11.20,
+    lon: 72.05,
+    meanDeltaT: 21.8,
+    worstMonthDeltaT: 19.5, // Below 20 threshold
+    reliability: 85.0,
+    recommendedIntakeDepth: 1000,
+    pipeLengthMeters: 4500,
+    environmentalFlag: 'Extended pipe run across reef'
+  },
+  {
+    id: 'candidate-b',
+    name: 'Candidate Island B',
+    region: 'Andaman',
+    lat: 13.00,
+    lon: 93.10,
+    meanDeltaT: 22.9,
+    worstMonthDeltaT: 21.0,
+    reliability: 98.8,
+    recommendedIntakeDepth: 1000,
+    pipeLengthMeters: 3200,
+    environmentalFlag: 'None'
+  }
+];
