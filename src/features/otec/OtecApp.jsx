@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { otecTheme } from './otec-theme';
 import { SectionCard, KpiCard, ThresholdBar, StatusBadge, InfoTooltip } from './components/SharedComponents';
-import { Activity, Download, Calendar, MapPin, Clock, Thermometer, Zap, Droplets, Map, TrendingUp, TrendingDown } from 'lucide-react';
+import { Activity, Download, Calendar, MapPin, Clock, Thermometer, Zap, Droplets, Map, TrendingUp, TrendingDown, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, ReferenceLine, ReferenceArea, Tooltip as RechartsTooltip, ResponsiveContainer, ComposedChart, ReferenceDot, Bar } from 'recharts';
 import { DAILY_FORECAST } from './mock-data/daily-forecast';
 import { SITES } from './mock-data/sites';
@@ -71,7 +72,7 @@ export default function OtecApp() {
   }, [forecast7Days]);
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: otecTheme.colors.bg, color: otecTheme.colors.textMain, fontFamily: 'sans-serif' }}>
+    <div style={{ height: '100vh', overflowY: 'auto', backgroundColor: otecTheme.colors.bg, color: otecTheme.colors.textMain, fontFamily: 'sans-serif' }}>
       {/* Top Header Bar */}
       <header style={{ 
         backgroundColor: otecTheme.colors.panel, 
@@ -82,7 +83,10 @@ export default function OtecApp() {
       }}>
         <div style={{ padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <Link to="/" style={{ color: otecTheme.colors.textSecondary, display: 'flex', alignItems: 'center' }} title="Back to OceanEmbed Dashboard">
+                <ArrowLeft size={18} />
+              </Link>
               <div style={{ width: '24px', height: '24px', backgroundColor: otecTheme.colors.accentTeal, color: otecTheme.colors.bg, borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Activity size={16} />
               </div>
@@ -120,17 +124,7 @@ export default function OtecApp() {
         </div>
       </header>
 
-      {/* Hero Strip */}
-      <div style={{ 
-        backgroundColor: 'rgba(47, 184, 201, 0.05)', 
-        borderBottom: `1px solid ${otecTheme.colors.border}`,
-        padding: '12px 24px',
-        fontSize: '13px',
-        color: otecTheme.colors.accentTeal,
-        fontWeight: 500
-      }}>
-        Satellites see the ocean's surface. Our AI reconstructs the temperature beneath it—turning daily ocean conditions into energy, freshwater, and site-selection intelligence.
-      </div>
+
 
       {/* Main Content Area */}
       <main style={{ padding: '24px', maxWidth: '1440px', margin: '0 auto' }}>
@@ -578,12 +572,6 @@ export default function OtecApp() {
             setSelectedSiteId={setSelectedSiteId}
           />
         )}
-        
-        {/* Global Disclaimer Footer */}
-        <div className="mt-8 pt-4 border-t border-white/10 text-center text-[#9FB3C4] text-[11px] flex items-center justify-center gap-2">
-          <AlertCircle size={12} className="text-[#E0A82E]" />
-          Indicative decision-support output derived from AI-reconstructed temperature profiles. Not a substitute for plant SCADA sensors, detailed engineering design, or safety controls.
-        </div>
       {/* Global Disclaimer Footer */}
         <div className="mt-8 pt-4 border-t border-white/10 text-center text-[#9FB3C4] text-[11px] flex items-center justify-center gap-2">
           <AlertCircle size={12} className="text-[#E0A82E]" />

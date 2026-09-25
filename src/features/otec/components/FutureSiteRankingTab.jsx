@@ -122,6 +122,7 @@ export default function FutureSiteRankingTab({ compareList, setCompareList, setA
 
   // Table Sorting
   const [sortConfig, setSortConfig] = useState({ key: 'suitabilityScore', direction: 'desc' });
+  const [showModal, setShowModal] = useState(false);
 
   const sortedSites = useMemo(() => {
     let sortableItems = [...filteredSites];

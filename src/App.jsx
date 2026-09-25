@@ -3,9 +3,10 @@ import { MapContainer, TileLayer, GeoJSON, useMap, useMapEvents } from 'react-le
 import L from 'leaflet';
 import {
   Plus, Search, Share2, Info, Download, Layers, Settings,
-  MousePointer, Upload, Thermometer, X, Eye, Shield, Droplets, Waves,
-  Wind, Navigation, AlertTriangle, Grid
+  MousePointer2, Upload, Thermometer, X, Eye, Shield, Droplets, Waves,
+  Wind, Navigation, AlertTriangle, Grid, Anchor
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import {
   getMockTemperature,
   getFullOceanProfile,
@@ -904,11 +905,10 @@ function OceanEmbedProbeCard({ probe, screenPos, depth, year, dayOfYear, forecas
                 <div className="text-[15px] font-mono font-black text-amber-300">
                   {profileData.tchp} <span className="text-[10px] font-normal text-amber-400/80">kJ/cm²</span>
                 </div>
-                <span className={`text-[8px] font-bold px-1.5 py-0.2 rounded border inline-block ${
-                  profileData.tchp > 40
+                <span className={`text-[8px] font-bold px-1.5 py-0.2 rounded border inline-block ${profileData.tchp > 40
                     ? 'bg-rose-950/80 text-rose-300 border-rose-700/60'
                     : 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60'
-                }`}>
+                  }`}>
                   {profileData.tchp > 40 ? 'High Cyclone Intensity Risk' : 'Low / Moderate Risk'}
                 </span>
               </div>
@@ -1112,7 +1112,7 @@ export default function App() {
   }, []);
 
   // 15 Depth levels from PPT
-  const visibleDepths = [0, 50, 100, 200, 500, 1000];
+  const visibleDepths = [0, 5, 10, 20, 30, 50, 75, 100, 125, 150, 200, 300, 500, 700, 1000];
 
   useEffect(() => {
     if (!isPlaying) return;
@@ -1128,7 +1128,7 @@ export default function App() {
   }, [probe, depth, year, dayOfYear, forecastDays, isProbeLand]);
 
   const TOOLS = [
-    { id: 'point', icon: MousePointer, label: 'Point probe' },
+    { id: 'point', icon: MousePointer2, label: 'Point probe' },
     { id: 'grid', icon: Grid, label: showGrid ? 'Hide 0.25° Grid' : 'Show 0.25° Grid' },
 
 
@@ -1216,6 +1216,11 @@ export default function App() {
           <span className="text-cyan-400 font-medium">15 Depths (0–1000m)</span>
           <span className="text-white/20">|</span>
           <span className="text-amber-300/90 font-medium">SIH 2026 · PS-26066</span>
+          <span className="text-white/20">|</span>
+          <Link to="/otec" className="bg-[#2FB8C9]/20 hover:bg-[#2FB8C9]/40 border border-[#2FB8C9]/50 text-[#2FB8C9] px-2 py-0.5 rounded font-bold transition-colors flex items-center gap-1">
+            <Anchor size={10} />
+            OTEC Intelligence Platform
+          </Link>
         </div>
       </div>
 
@@ -1276,11 +1281,10 @@ export default function App() {
               <button
                 key={fDays}
                 onClick={() => setForecastDays(fDays)}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-mono font-bold transition-all shadow-sm ${
-                  forecastDays === fDays
+                className={`px-2.5 py-1 rounded-md text-[11px] font-mono font-bold transition-all shadow-sm ${forecastDays === fDays
                     ? 'bg-cyan-600 text-white ring-2 ring-cyan-400/50 scale-105'
                     : 'bg-white text-gray-700 hover:bg-cyan-100 border border-gray-200'
-                }`}
+                  }`}
               >
                 {fDays === 0 ? 'Now' : `+${fDays}d`}
               </button>
@@ -1345,14 +1349,17 @@ export default function App() {
                 }
                 setActiveTool(id);
               }}
-              title={label}
-              className={`w-10 h-10 flex items-center justify-center transition-all border-b border-white/[0.05] last:border-b-0
+              title=""
+              className={`group relative w-10 h-10 flex items-center justify-center transition-all border-b border-white/[0.05] last:border-b-0
                 ${activeTool === id || (id === 'grid' && showGrid)
                   ? 'bg-cyan-500/20 text-cyan-300 font-bold'
                   : 'text-gray-400 hover:text-white hover:bg-white/[0.06]'
                 }`}
             >
               <Icon size={16} />
+              <div className="absolute right-12 px-2 py-1 bg-[#0a0e1a] border border-white/20 text-gray-200 text-[10px] font-mono rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-[1200] shadow-xl">
+                {label}
+              </div>
             </button>
           ))}
         </div>

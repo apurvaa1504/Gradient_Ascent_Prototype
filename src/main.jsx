@@ -1,4 +1,6 @@
-import { StrictMode } from 'react'
+import { StrictMode } from "react";
+import { setupErrorLogger } from "./error-logger";
+setupErrorLogger();
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import './index.css'

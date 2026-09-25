@@ -4,7 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { otecTheme } from '../otec-theme';
 import { SectionCard, StatusBadge, InfoTooltip } from './SharedComponents';
-import { MapPin, Filter, Layers, Database, Droplet, Ship, Check, Eye, PlusCircle, ExternalLink, Thermometer, BarChart2 } from 'lucide-react';
+import { MapPin, Filter, Layers, Database, Droplet, Ship, Check, Eye, PlusCircle, ExternalLink, Thermometer, BarChart2, Zap } from 'lucide-react';
 import { SITES } from '../mock-data/sites';
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, ReferenceLine, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, ErrorBar, Area } from 'recharts';
 
