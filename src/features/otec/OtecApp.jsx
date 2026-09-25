@@ -8,6 +8,7 @@ import { SITES } from './mock-data/sites';
 import { DEPTH_PROFILE } from './mock-data/depth-profile';
 import { HISTORY_30DAY } from './mock-data/history-30day';
 import SiteExplorerTab from './components/SiteExplorerTab';
+import FutureSiteRankingTab from './components/FutureSiteRankingTab';
 
 export default function OtecApp() {
   const [activeTab, setActiveTab] = useState("Today's Operations");
@@ -570,10 +571,7 @@ export default function OtecApp() {
         )}
         
         {activeTab === "Future Site Ranking" && (
-          <div>
-             <h2 style={{ fontSize: '20px', fontWeight: 600, marginBottom: '20px' }}>Future Site Ranking</h2>
-             {/* Shell placeholder for tab 3 */}
-          </div>
+          <FutureSiteRankingTab compareList={compareList} setCompareList={setCompareList} />
         )}
       </main>
     </div>
