@@ -479,7 +479,7 @@ export default function FutureSiteRankingTab({ compareList, setCompareList, setA
                 <th className="py-2.5 px-3 font-medium cursor-pointer hover:text-white" onClick={() => requestSort('reliability')}>Viable Days {getSortIcon('reliability')}</th>
                 <th className="py-2.5 px-3 font-medium cursor-pointer hover:text-white" onClick={() => requestSort('recommendedIntakeDepth')}>Rec. Depth {getSortIcon('recommendedIntakeDepth')}</th>
                 <th className="py-2.5 px-3 font-medium cursor-pointer hover:text-white" onClick={() => requestSort('pipeLengthMeters')}>Est. Pipe {getSortIcon('pipeLengthMeters')}</th>
-                <th className="py-2.5 px-3 font-medium cursor-pointer hover:text-white" onClick={() => requestSort('power')}>Gross Power ({capacity}MW) {getSortIcon('power')}</th>
+                <th className="py-2.5 px-3 font-medium cursor-pointer hover:text-white" onClick={() => requestSort('power')}>Est. Gross Power ({capacity}MW) {getSortIcon('power')}</th>
                 <th className="py-2.5 px-3 font-medium cursor-pointer hover:text-white" onClick={() => requestSort('environmentalFlag')}>Env. Flag {getSortIcon('environmentalFlag')}</th>
               </tr>
             </thead>

@@ -185,7 +185,7 @@ export default function OtecApp() {
                  icon={Thermometer}
                  title="Thermal Gradient (ΔT)"
                  value={computedDeltaT}
-                 unit="°C"
+                 unit="°C ± 0.2°C"
                  statusLabel={deltaTStatusLabel}
                  statusType={deltaTStatus}
                  description={`Surface ${surfaceTemp.toFixed(1)}°C → Deep water at ${intakeDepth} m: ${deepTemp.toFixed(1)}°C`}
@@ -211,7 +211,7 @@ export default function OtecApp() {
                  icon={Zap}
                  title="Estimated Gross Power Output"
                  value={computedPower}
-                 unit="kW"
+                 unit="kW (± 5%)"
                  description="Expected today"
                >
                  <div className="flex flex-col gap-1.5 h-full">
@@ -240,7 +240,7 @@ export default function OtecApp() {
                  icon={Droplets}
                  title="Estimated Freshwater Output"
                  value={computedWaterLakh}
-                 unit="lakh L/day"
+                 unit="lakh L/day (Indicative)"
                  description={`${computedWater.toLocaleString()} L/day`}
                >
                  <div className="flex flex-col gap-1.5 h-full">
@@ -376,7 +376,7 @@ export default function OtecApp() {
                          </div>
                          <div className="w-full h-px bg-white/10 my-1"></div>
                          <div className="flex items-center justify-between">
-                           <span className="text-[#9FB3C4]">Available ΔT:</span> <span className="text-[#2FB8C9] font-bold font-mono">{computedDeltaT.toFixed(1)}°C</span>
+                           <span className="text-[#9FB3C4]">Available ΔT:</span> <span className="text-[#2FB8C9] font-bold font-mono">{computedDeltaT.toFixed(1)}°C ± 0.2°C</span>
                          </div>
                        </div>
                     </div>
@@ -578,6 +578,17 @@ export default function OtecApp() {
             setSelectedSiteId={setSelectedSiteId}
           />
         )}
+        
+        {/* Global Disclaimer Footer */}
+        <div className="mt-8 pt-4 border-t border-white/10 text-center text-[#9FB3C4] text-[11px] flex items-center justify-center gap-2">
+          <AlertCircle size={12} className="text-[#E0A82E]" />
+          Indicative decision-support output derived from AI-reconstructed temperature profiles. Not a substitute for plant SCADA sensors, detailed engineering design, or safety controls.
+        </div>
+      {/* Global Disclaimer Footer */}
+        <div className="mt-8 pt-4 border-t border-white/10 text-center text-[#9FB3C4] text-[11px] flex items-center justify-center gap-2">
+          <AlertCircle size={12} className="text-[#E0A82E]" />
+          Indicative decision-support output derived from AI-reconstructed temperature profiles. Not a substitute for plant SCADA sensors, detailed engineering design, or safety controls.
+        </div>
       </main>
     </div>
   );

@@ -315,7 +315,7 @@ export default function SiteExplorerTab({ selectedSiteId, setSelectedSiteId, com
                           <div className="flex flex-col gap-1 mt-2">
                             <div className="flex justify-between">
                               <span className="text-[#9FB3C4]">Mean ΔT:</span>
-                              <span className="font-mono text-[#2FB8C9]">{site.meanDeltaT}°C</span>
+                              <span className="font-mono text-[#2FB8C9]">{site.meanDeltaT}°C ± 0.1°C</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-[#9FB3C4]">Worst Season ΔT:</span>
@@ -402,7 +402,7 @@ export default function SiteExplorerTab({ selectedSiteId, setSelectedSiteId, com
                    <div className="text-[11px] text-[#9FB3C4] uppercase tracking-wide mb-1">Thermal Gradient</div>
                    <div className="flex items-baseline gap-1">
                      <span className="text-[18px] font-mono text-white">{selectedSite.meanDeltaT.toFixed(1)}</span>
-                     <span className="text-[12px] text-[#9FB3C4]">°C mean</span>
+                     <span className="text-[12px] text-[#9FB3C4]">°C ± 0.1°C</span>
                    </div>
                    <div className="text-[11px] text-[#E0524D] mt-0.5">Worst month: {selectedSite.worstMonthDeltaT.toFixed(1)}°C</div>
                  </div>
@@ -443,13 +443,13 @@ export default function SiteExplorerTab({ selectedSiteId, setSelectedSiteId, com
                  </div>
                  <div className="flex justify-between items-center mt-2">
                    <div>
-                     <div className="text-[10px] uppercase text-[#9FB3C4]">Est. Net Power</div>
-                     <div className="text-[16px] font-bold text-white font-mono">{(capacity * ((selectedSite.meanDeltaT - 18) / 4)).toFixed(1)} <span className="text-[12px] font-normal text-[#9FB3C4]">MW</span></div>
+                     <div className="text-[10px] uppercase text-[#9FB3C4]">Est. Gross Power Output</div>
+                     <div className="text-[16px] font-bold text-white font-mono">{(capacity * ((selectedSite.meanDeltaT - 18) / 4)).toFixed(1)} <span className="text-[12px] font-normal text-[#9FB3C4]">MW (± 5%)</span></div>
                    </div>
                    <div className="w-px h-8 bg-white/10"></div>
                    <div className="text-right">
-                     <div className="text-[10px] uppercase text-[#9FB3C4]">Freshwater Coproduct</div>
-                     <div className="text-[16px] font-bold text-white font-mono">{((capacity * ((selectedSite.meanDeltaT - 18) / 4)) * 105.5 / 1000).toFixed(1)} <span className="text-[12px] font-normal text-[#9FB3C4]">ML/day</span></div>
+                     <div className="text-[10px] uppercase text-[#9FB3C4]">Est. Freshwater Output</div>
+                     <div className="text-[16px] font-bold text-white font-mono">{((capacity * ((selectedSite.meanDeltaT - 18) / 4)) * 105.5 / 1000).toFixed(1)} <span className="text-[12px] font-normal text-[#9FB3C4]">ML/day (Indicative)</span></div>
                    </div>
                  </div>
                </div>
