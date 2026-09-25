@@ -1,8 +1,33 @@
-fastapi>=0.100.0
-uvicorn>=0.20.0
-torch>=2.0.0
-xarray>=2023.1.0
-netCDF4>=1.6.0
+# OceanEmbed Backend — Python dependencies
+#
+# Install:
+#   pip install -r requirements.txt
+#
+# If CUDA is available install the CUDA-enabled torch build from pytorch.org
+# instead of the CPU-only version pip would pull by default.
+
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-dotenv>=1.0.0
+
+# PyTorch — CPU build; replace with CUDA wheel if GPU is available
+# https://pytorch.org/get-started/locally/
+torch>=2.1.0
+
+# Scientific stack
 numpy>=1.24.0
-scipy>=1.10.0
-pydantic>=2.0.0
+scipy>=1.11.0
+
+# xarray + NetCDF4 for reading OSCAR / SMAP data
+xarray>=2024.1.0
+netCDF4>=1.6.0
+scipy>=1.11.0
+
+# HTTP client for SMAP public download and ERDDAP
+requests>=2.31.0
+
+# Copernicus Marine Service Python client (CMEMS: SST, SSH, Wind)
+copernicusmarine>=2.0.0
+
+# NASA PO.DAAC client for SMAP SSS and OSCAR currents
+earthaccess>=0.9

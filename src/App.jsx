@@ -1,31 +1,28 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { MapContainer, TileLayer, GeoJSON, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import {
   Plus, Search, Share2, Info, Download, Layers, Settings,
-  MousePointer, Activity, Square, Upload, Play, Pause,
-  ChevronLeft, ChevronRight, SkipBack, SkipForward,
-  Thermometer, X, Eye, Sparkles, Shield, Droplets, Waves,
-  Wind, Navigation, ArrowUpRight, BarChart3, TrendingUp, AlertTriangle
+  MousePointer, Upload, Thermometer, X, Eye, Shield, Droplets, Waves,
+  Wind, Navigation, AlertTriangle, Grid
 } from 'lucide-react';
 import {
   getMockTemperature,
   getFullOceanProfile,
-  getAnnualTimeseries,
-  getSatelliteInputs,
-  DEPTHS
+  getSatelliteInputs
 } from './simulation';
 import { worldLandGeoJSON, isLandCoordinate } from './geoData';
+import { fetchInferencePrediction } from './apiClient';
 
 // ─── Copernicus Magma/Inferno Continuous Palette ─────────────────────────────
 const MAGMA_STOPS = [
-  { p: 0.00, r: 15,  g: 10,  b: 40  },
-  { p: 0.15, r: 48,  g: 18,  b: 88  },
-  { p: 0.30, r: 92,  g: 22,  b: 110 },
-  { p: 0.45, r: 145, g: 38,  b: 100 },
-  { p: 0.60, r: 200, g: 65,  b: 70  },
-  { p: 0.75, r: 242, g: 115, b: 50  },
-  { p: 0.88, r: 253, g: 185, b: 85  },
+  { p: 0.00, r: 15, g: 10, b: 40 },
+  { p: 0.15, r: 48, g: 18, b: 88 },
+  { p: 0.30, r: 92, g: 22, b: 110 },
+  { p: 0.45, r: 145, g: 38, b: 100 },
+  { p: 0.60, r: 200, g: 65, b: 70 },
+  { p: 0.75, r: 242, g: 115, b: 50 },
+  { p: 0.88, r: 253, g: 185, b: 85 },
   { p: 1.00, r: 254, g: 250, b: 180 },
 ];
 
@@ -120,6 +117,246 @@ function OceanThermalHeatmap({ depth, year, dayOfYear, forecastDays, opacity }) 
   return null;
 }
 
+// ─── 0.25° x 0.25° High-Precision Spatial Grid Mesh Overlay ───────────────────
+function Grid025Overlay({ enabled = true, showLabels = true, opacity = 0.85, probe, hoveredCell }) {
+  const map = useMap();
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    if (!map) return;
+
+    const container = map.getPanes().overlayPane;
+    const canvas = document.createElement('canvas');
+    canvas.style.position = 'absolute';
+    canvas.style.top = '0';
+    canvas.style.left = '0';
+    canvas.style.pointerEvents = 'none';
+    canvas.style.zIndex = '15';
+    container.appendChild(canvas);
+    canvasRef.current = canvas;
+
+    const redraw = () => {
+      if (!canvasRef.current) return;
+      const ctx = canvas.getContext('2d');
+      const size = map.getSize();
+
+      if (!enabled) {
+        ctx.clearRect(0, 0, size.x, size.y);
+        return;
+      }
+
+      const bounds = map.getBounds();
+      const zoom = map.getZoom();
+
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = size.x * dpr;
+      canvas.height = size.y * dpr;
+      canvas.style.width = `${size.x}px`;
+      canvas.style.height = `${size.y}px`;
+
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, size.x, size.y);
+      ctx.globalAlpha = opacity;
+
+      const latMin = 5.0;
+      const latMax = 30.0;
+      const lonMin = 45.0;
+      const lonMax = 105.0;
+      const step = 0.25;
+
+      const topLeft = map.containerPointToLayerPoint([0, 0]);
+      L.DomUtil.setPosition(canvas, topLeft);
+
+      const visibleSouth = Math.max(latMin, Math.floor(bounds.getSouth() / step) * step);
+      const visibleNorth = Math.min(latMax, Math.ceil(bounds.getNorth() / step) * step);
+      const visibleWest = Math.max(lonMin, Math.floor(bounds.getWest() / step) * step);
+      const visibleEast = Math.min(lonMax, Math.ceil(bounds.getEast() / step) * step);
+
+
+
+      // 2. Latitude Lines (Horizontal 0.25° Grid)
+      for (let lat = visibleSouth; lat <= visibleNorth + 0.0001; lat += step) {
+        const roundedLat = Math.round(lat * 100) / 100;
+        const isMajor1Deg = Math.abs(Math.round(roundedLat) - roundedLat) < 0.01;
+        const isMaster5Deg = Math.abs(Math.round(roundedLat / 5) * 5 - roundedLat) < 0.01;
+
+        const startPt = map.latLngToContainerPoint([roundedLat, Math.max(lonMin, visibleWest)]);
+        const endPt = map.latLngToContainerPoint([roundedLat, Math.min(lonMax, visibleEast)]);
+
+        ctx.beginPath();
+        ctx.moveTo(startPt.x, startPt.y);
+        ctx.lineTo(endPt.x, endPt.y);
+
+        if (isMaster5Deg) {
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.75)';
+          ctx.lineWidth = 1.2;
+          ctx.setLineDash([]);
+        } else if (isMajor1Deg) {
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)';
+          ctx.lineWidth = 0.9;
+          ctx.setLineDash([]);
+        } else {
+          if (zoom < 4) continue;
+          ctx.strokeStyle = zoom >= 6 ? 'rgba(56, 189, 248, 0.28)' : 'rgba(56, 189, 248, 0.15)';
+          ctx.lineWidth = 0.6;
+          ctx.setLineDash(zoom >= 6 ? [] : [2, 2]);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Labels
+        if (showLabels && (isMaster5Deg || (zoom >= 6 && isMajor1Deg)) && startPt.x >= 0 && startPt.x <= size.x) {
+          ctx.fillStyle = isMaster5Deg ? '#38bdf8' : 'rgba(255, 255, 255, 0.7)';
+          ctx.font = '9px monospace';
+          ctx.fillText(`${roundedLat.toFixed(2)}°N`, Math.max(10, startPt.x + 4), startPt.y - 3);
+        }
+      }
+
+      // 3. Longitude Lines (Vertical 0.25° Grid)
+      for (let lon = visibleWest; lon <= visibleEast + 0.0001; lon += step) {
+        const roundedLon = Math.round(lon * 100) / 100;
+        const isMajor1Deg = Math.abs(Math.round(roundedLon) - roundedLon) < 0.01;
+        const isMaster5Deg = Math.abs(Math.round(roundedLon / 5) * 5 - roundedLon) < 0.01;
+
+        const startPt = map.latLngToContainerPoint([Math.max(latMin, visibleSouth), roundedLon]);
+        const endPt = map.latLngToContainerPoint([Math.min(latMax, visibleNorth), roundedLon]);
+
+        ctx.beginPath();
+        ctx.moveTo(startPt.x, startPt.y);
+        ctx.lineTo(endPt.x, endPt.y);
+
+        if (isMaster5Deg) {
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.75)';
+          ctx.lineWidth = 1.2;
+          ctx.setLineDash([]);
+        } else if (isMajor1Deg) {
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)';
+          ctx.lineWidth = 0.9;
+          ctx.setLineDash([]);
+        } else {
+          if (zoom < 4) continue;
+          ctx.strokeStyle = zoom >= 6 ? 'rgba(56, 189, 248, 0.28)' : 'rgba(56, 189, 248, 0.15)';
+          ctx.lineWidth = 0.6;
+          ctx.setLineDash(zoom >= 6 ? [] : [2, 2]);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Labels
+        if (showLabels && (isMaster5Deg || (zoom >= 6 && isMajor1Deg)) && endPt.y >= 0 && endPt.y <= size.y) {
+          ctx.fillStyle = isMaster5Deg ? '#38bdf8' : 'rgba(255, 255, 255, 0.7)';
+          ctx.font = '9px monospace';
+          ctx.fillText(`${roundedLon.toFixed(2)}°E`, endPt.x + 3, Math.min(size.y - 10, endPt.y - 4));
+        }
+      }
+
+      // 4. Highlight Selected Probe 0.25° Grid Cell
+      if (probe && probe.lat >= latMin && probe.lat <= latMax && probe.lon >= lonMin && probe.lon <= lonMax) {
+        const row = Math.floor((probe.lat - latMin) / step);
+        const col = Math.floor((probe.lon - lonMin) / step);
+        const cellLatFloor = latMin + row * step;
+        const cellLonFloor = lonMin + col * step;
+
+        const nw = map.latLngToContainerPoint([cellLatFloor + step, cellLonFloor]);
+        const se = map.latLngToContainerPoint([cellLatFloor, cellLonFloor + step]);
+
+        const w = se.x - nw.x;
+        const h = se.y - nw.y;
+
+        // Glowing cell fill
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.18)';
+        ctx.fillRect(nw.x, nw.y, w, h);
+
+        // Bright border
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([]);
+        ctx.strokeRect(nw.x, nw.y, w, h);
+
+        // Corner Target Reticle Ticks
+        const tLen = Math.min(8, Math.max(3, w / 4));
+        ctx.strokeStyle = '#f43f5e';
+        ctx.lineWidth = 2;
+        // TL
+        ctx.beginPath(); ctx.moveTo(nw.x, nw.y + tLen); ctx.lineTo(nw.x, nw.y); ctx.lineTo(nw.x + tLen, nw.y); ctx.stroke();
+        // TR
+        ctx.beginPath(); ctx.moveTo(nw.x + w - tLen, nw.y); ctx.lineTo(nw.x + w, nw.y); ctx.lineTo(nw.x + w, nw.y + tLen); ctx.stroke();
+        // BL
+        ctx.beginPath(); ctx.moveTo(nw.x, nw.y + h - tLen); ctx.lineTo(nw.x, nw.y + h); ctx.lineTo(nw.x + tLen, nw.y + h); ctx.stroke();
+        // BR
+        ctx.beginPath(); ctx.moveTo(nw.x + w - tLen, nw.y + h); ctx.lineTo(nw.x + w, nw.y + h); ctx.lineTo(nw.x + w, nw.y + h - tLen); ctx.stroke();
+      }
+
+      // 5. Highlight Hovered 0.25° Grid Cell
+      if (hoveredCell && hoveredCell.lat >= latMin && hoveredCell.lat <= latMax && hoveredCell.lon >= lonMin && hoveredCell.lon <= lonMax) {
+        const row = Math.floor((hoveredCell.lat - latMin) / step);
+        const col = Math.floor((hoveredCell.lon - lonMin) / step);
+        const cellLatFloor = latMin + row * step;
+        const cellLonFloor = lonMin + col * step;
+
+        const nw = map.latLngToContainerPoint([cellLatFloor + step, cellLonFloor]);
+        const se = map.latLngToContainerPoint([cellLatFloor, cellLonFloor + step]);
+
+        ctx.fillStyle = 'rgba(244, 114, 182, 0.12)';
+        ctx.fillRect(nw.x, nw.y, se.x - nw.x, se.y - nw.y);
+
+        ctx.strokeStyle = 'rgba(244, 114, 182, 0.8)';
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([3, 3]);
+        ctx.strokeRect(nw.x, nw.y, se.x - nw.x, se.y - nw.y);
+        ctx.setLineDash([]);
+      }
+    };
+
+    redraw();
+
+    map.on('move', redraw);
+    map.on('zoom', redraw);
+    map.on('resize', redraw);
+
+    return () => {
+      map.off('move', redraw);
+      map.off('zoom', redraw);
+      map.off('resize', redraw);
+      if (canvasRef.current) {
+        canvasRef.current.remove();
+        canvasRef.current = null;
+      }
+    };
+  }, [map, enabled, showLabels, opacity, probe, hoveredCell]);
+
+  return null;
+}
+
+// ─── Map Mouse & Click Handler ──────────────────────────────────────────────
+function MapMouseEvents({ onCoordClick, onCoordHover, snapToGrid }) {
+  const map = useMap();
+  useMapEvents({
+    click(e) {
+      let lat = Math.round(e.latlng.lat * 1000) / 1000;
+      let lon = Math.round(e.latlng.lng * 1000) / 1000;
+      if (snapToGrid) {
+        const latMin = 5.0, lonMin = 45.0, step = 0.25;
+        const r = Math.round((Math.max(5, Math.min(30, lat)) - latMin) / step);
+        const c = Math.round((Math.max(45, Math.min(105, lon)) - lonMin) / step);
+        lat = Math.round((latMin + r * step) * 1000) / 1000;
+        lon = Math.round((lonMin + c * step) * 1000) / 1000;
+      }
+      const point = map.latLngToContainerPoint([lat, lon]);
+      onCoordClick(lat, lon, point);
+    },
+    mousemove(e) {
+      const lat = Math.round(e.latlng.lat * 1000) / 1000;
+      const lon = Math.round(e.latlng.lng * 1000) / 1000;
+      onCoordHover({ lat, lon });
+    },
+    mouseout() {
+      onCoordHover(null);
+    }
+  });
+  return null;
+}
+
 // ─── Crisp Land Vector Mask ───────────────────────────────────────────────────
 function LandVectorMask() {
   const landStyle = {
@@ -162,19 +399,7 @@ function ProbeMarker({ lat, lon }) {
   return null;
 }
 
-// ─── Map Click Coordinate Handler ─────────────────────────────────────────────
-function MapClickHandler({ onCoordClick }) {
-  const map = useMap();
-  useMapEvents({
-    click(e) {
-      const lat = Math.round(e.latlng.lat * 1000) / 1000;
-      const lon = Math.round(e.latlng.lng * 1000) / 1000;
-      const point = map.latLngToContainerPoint(e.latlng);
-      onCoordClick(lat, lon, point);
-    },
-  });
-  return null;
-}
+
 
 // ─── Keep Pin in Sync with Map Pan/Zoom ────────────────────────────────────────
 function MapPositionTracker({ probe, setScreenPos }) {
@@ -196,7 +421,7 @@ function MapPositionTracker({ probe, setScreenPos }) {
 }
 
 // ─── Full SIH OceanEmbed Probe Card ───────────────────────────────────────────
-function OceanEmbedProbeCard({ probe, screenPos, depth, year, dayOfYear, forecastDays, onClose }) {
+function OceanEmbedProbeCard({ probe, screenPos, depth, year, dayOfYear, forecastDays, onClose, inferenceResult, inferenceLoading }) {
   const [activeTab, setActiveTab] = useState('physics'); // 'physics' | 'validation' | 'defense' | 'inputs'
 
   const profileData = useMemo(() =>
@@ -209,10 +434,7 @@ function OceanEmbedProbeCard({ probe, screenPos, depth, year, dayOfYear, forecas
     [probe, year, dayOfYear]
   );
 
-  const annualData = useMemo(() =>
-    getAnnualTimeseries(probe.lat, probe.lon, depth, year),
-    [probe, depth, year]
-  );
+
 
   const currentTemp = useMemo(() =>
     getMockTemperature(probe.lat, probe.lon, depth, year, dayOfYear, forecastDays),
@@ -225,6 +447,16 @@ function OceanEmbedProbeCard({ probe, screenPos, depth, year, dayOfYear, forecas
     return `${lonStr}, ${latStr}`;
   }, [probe]);
 
+  const gridInfo = useMemo(() => {
+    const latMin = 5.0, latMax = 30.0, lonMin = 45.0, lonMax = 105.0, step = 0.25;
+    if (probe.lat < latMin || probe.lat > latMax || probe.lon < lonMin || probe.lon > lonMax) {
+      return null;
+    }
+    const row = Math.floor((probe.lat - latMin) / step);
+    const col = Math.floor((probe.lon - lonMin) / step);
+    return { row, col };
+  }, [probe]);
+
   const isLand = useMemo(() => isLandCoordinate(probe.lat, probe.lon), [probe.lat, probe.lon]);
 
   // Position card intelligently right next to the clicked pin point on the viewport
@@ -233,7 +465,7 @@ function OceanEmbedProbeCard({ probe, screenPos, depth, year, dayOfYear, forecas
     const cardW = 340;
     const cardH = isLand ? 360 : 460;
     const pad = 16;
-    
+
     let left = screenPos.x + 14;
     let top = screenPos.y - 20;
 
@@ -343,6 +575,9 @@ function OceanEmbedProbeCard({ probe, screenPos, depth, year, dayOfYear, forecas
         </button>
       </div>
 
+      {/* ── 0.25° SPATIAL GRID MESH BADGE BAR ── */}
+
+
       {/* ── LIVE PRIMARY TELEMETRY BAR ── */}
       <div className="px-3 pt-2.5 pb-2 bg-white/[0.02] flex items-center justify-between border-b border-white/[0.06]">
         <div>
@@ -360,11 +595,10 @@ function OceanEmbedProbeCard({ probe, screenPos, depth, year, dayOfYear, forecas
         {/* MHW Status Pill */}
         <div className="text-right">
           <div className="text-[9px] text-gray-400">Marine Heatwave</div>
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full inline-block mt-0.5 ${
-            profileData.mhwStatus.includes('Strong')
-              ? 'bg-rose-950/80 text-rose-300 border border-rose-700/60'
-              : 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/60'
-          }`}>
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full inline-block mt-0.5 ${profileData.mhwStatus.includes('Strong')
+            ? 'bg-rose-950/80 text-rose-300 border border-rose-700/60'
+            : 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/60'
+            }`}>
             {profileData.mhwStatus}
           </span>
         </div>
@@ -374,41 +608,37 @@ function OceanEmbedProbeCard({ probe, screenPos, depth, year, dayOfYear, forecas
       <div className="flex border-b border-white/10 bg-[#080b11] text-[10px] font-medium">
         <button
           onClick={() => setActiveTab('physics')}
-          className={`flex-1 py-1.5 text-center transition-all ${
-            activeTab === 'physics'
-              ? 'text-cyan-400 border-b-2 border-cyan-400 bg-cyan-500/10 font-bold'
-              : 'text-gray-400 hover:text-gray-200'
-          }`}
+          className={`flex-1 py-1.5 text-center transition-all ${activeTab === 'physics'
+            ? 'text-cyan-400 border-b-2 border-cyan-400 bg-cyan-500/10 font-bold'
+            : 'text-gray-400 hover:text-gray-200'
+            }`}
         >
           15-Depth Profile
         </button>
         <button
           onClick={() => setActiveTab('defense')}
-          className={`flex-1 py-1.5 text-center transition-all ${
-            activeTab === 'defense'
-              ? 'text-fuchsia-400 border-b-2 border-fuchsia-400 bg-fuchsia-500/10 font-bold'
-              : 'text-gray-400 hover:text-gray-200'
-          }`}
+          className={`flex-1 py-1.5 text-center transition-all ${activeTab === 'defense'
+            ? 'text-fuchsia-400 border-b-2 border-fuchsia-400 bg-fuchsia-500/10 font-bold'
+            : 'text-gray-400 hover:text-gray-200'
+            }`}
         >
           Sonic / SLD
         </button>
         <button
           onClick={() => setActiveTab('validation')}
-          className={`flex-1 py-1.5 text-center transition-all ${
-            activeTab === 'validation'
-              ? 'text-emerald-400 border-b-2 border-emerald-400 bg-emerald-500/10 font-bold'
-              : 'text-gray-400 hover:text-gray-200'
-          }`}
+          className={`flex-1 py-1.5 text-center transition-all ${activeTab === 'validation'
+            ? 'text-emerald-400 border-b-2 border-emerald-400 bg-emerald-500/10 font-bold'
+            : 'text-gray-400 hover:text-gray-200'
+            }`}
         >
           ARGO Benchmark
         </button>
         <button
           onClick={() => setActiveTab('inputs')}
-          className={`flex-1 py-1.5 text-center transition-all ${
-            activeTab === 'inputs'
-              ? 'text-amber-400 border-b-2 border-amber-400 bg-amber-500/10 font-bold'
-              : 'text-gray-400 hover:text-gray-200'
-          }`}
+          className={`flex-1 py-1.5 text-center transition-all ${activeTab === 'inputs'
+            ? 'text-amber-400 border-b-2 border-amber-400 bg-amber-500/10 font-bold'
+            : 'text-gray-400 hover:text-gray-200'
+            }`}
         >
           5 Satellite Inputs
         </button>
@@ -416,17 +646,44 @@ function OceanEmbedProbeCard({ probe, screenPos, depth, year, dayOfYear, forecas
 
       {/* ── TAB CONTENT ── */}
       <div className="p-3 space-y-2.5 max-h-[310px] overflow-y-auto">
-        
+
         {/* ── TAB 1: 15-DEPTH VERTICAL TEMPERATURE & SALINITY ── */}
         {activeTab === 'physics' && (
           <>
+            {/* Model source badge */}
+            <div className="flex items-center justify-between mb-1.5">
+              {inferenceLoading && (
+                <div className="flex items-center gap-1.5 text-[9px] text-cyan-400 font-mono animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping inline-block" />
+                  Fetching real satellite data & running model…
+                </div>
+              )}
+              {inferenceResult && !inferenceLoading && (
+                <span className="text-[9px] font-bold text-emerald-300 bg-emerald-950/60 border border-emerald-700/50 px-1.5 py-0.5 rounded">
+                  ✓ LIVE MODEL — real satellite inputs
+                </span>
+              )}
+              {!inferenceResult && !inferenceLoading && (
+                <span className="text-[9px] text-gray-500 font-mono"> Depth Wise Temprature Graph</span>
+              )}
+            </div>
+
             {/* Chart: Vertical T(z) Profile */}
-            <div className="bg-[#090c12] p-2 rounded-lg border border-white/[0.08]">
-              <div className="flex justify-between items-center text-[10px] font-mono text-gray-400 mb-1">
-                <span className="text-gray-200 font-semibold">T(z) Depth Profile</span>
-                <div className="flex gap-4 text-[9px]">
+            <div className="bg-[#090c12] p-2.5 rounded-lg border border-white/[0.08] space-y-1.5">
+              {/* Chart Header */}
+              <div className="flex justify-between items-start">
+                <div>
+                  <div className="text-[12px] font-bold text-gray-100 flex items-center gap-1.5">
+                    Temperature profile
+                  </div>
+                  <div className="text-[10px] font-mono text-gray-400">
+                    {formattedCoord}
+                  </div>
+                </div>
+                <div className="flex gap-3 text-[9px] font-mono">
                   <span className="flex items-center gap-1 text-cyan-400">
-                    <span className="w-2 h-0.5 bg-cyan-400 inline-block" /> OceanEmbed
+                    <span className="w-2 h-0.5 bg-cyan-400 inline-block" />
+                    {inferenceResult ? 'UNetOcean3D' : 'OceanEmbed'}
                   </span>
                   <span className="flex items-center gap-1 text-gray-400">
                     <span className="w-2 h-0.5 border-t border-dashed border-gray-400 inline-block" /> GLORYS12
@@ -434,72 +691,227 @@ function OceanEmbedProbeCard({ probe, screenPos, depth, year, dayOfYear, forecas
                 </div>
               </div>
 
-              <svg width={CW} height={CH} className="overflow-visible">
-                {/* Horizontal Depth grid */}
-                {[0, 200, 500, 1000].map(d => {
-                  const y = (d / 1000) * CH;
-                  return (
-                    <g key={d}>
-                      <line x1={0} y1={y} x2={CW - 32} y2={y} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
-                      <text x={CW - 4} y={y + 3} fill="#6b7280" fontSize={8} textAnchor="end" fontFamily="monospace">
-                        {d === 0 ? '0m' : `-${d}m`}
-                      </text>
-                    </g>
-                  );
-                })}
+              {inferenceLoading ? (
+                <div className="flex items-center justify-center" style={{ width: CW, height: 160 }}>
+                  <div className="text-center">
+                    <div className="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                    <div className="text-[10px] text-gray-400 font-mono">Running inference…</div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {(() => {
+                    const chartH = 150;
+                    const padL = 36;
+                    const padR = 100;
+                    const padT = 12;
+                    const padB = 22;
+                    const plotW = CW - padL - padR; // 290 - 36 - 100 = 154
+                    const plotH = chartH - padT - padB; // 150 - 12 - 22 = 116
 
-                {/* GLORYS Reference Line */}
-                {(() => {
-                  const pts = profileData.depths.map((d, i) => {
-                    const temp = profileData.tempGlorys[i];
-                    const x = ((temp - 2) / 30) * (CW - 32);
-                    const y = (d / 1000) * CH;
-                    return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
-                  }).join(' ');
-                  return <path d={pts} fill="none" stroke="#64748b" strokeWidth={1.4} strokeDasharray="3 2" />;
-                })()}
+                    const tMin = 4, tMax = 32;
+                    const tempToX = (t) => padL + Math.max(0, Math.min(1, (t - tMin) / (tMax - tMin))) * plotW;
+                    const depthToY = (d) => padT + Math.max(0, Math.min(1, d / 1000)) * plotH;
 
-                {/* OceanEmbed Reconstructed Line */}
-                {(() => {
-                  const pts = profileData.depths.map((d, i) => {
-                    const temp = profileData.tempEmbed[i];
-                    const x = ((temp - 2) / 30) * (CW - 32);
-                    const y = (d / 1000) * CH;
-                    return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
-                  }).join(' ');
-                  return <path d={pts} fill="none" stroke="#38bdf8" strokeWidth={2.2} />;
-                })()}
+                    // Thermocline detection for this location
+                    const isBoB = probe.lon > 80.0;
+                    const thermStart = isBoB ? 30 : 50;
+                    const thermEnd = isBoB ? 150 : 180;
+                    const yStart = depthToY(thermStart);
+                    const yEnd = depthToY(thermEnd);
 
-                {/* Active Selected Depth Marker */}
-                {(() => {
-                  const depthY = (depth / 1000) * CH;
-                  return <line x1={0} y1={depthY} x2={CW - 32} y2={depthY} stroke="#f43f5e" strokeWidth={1.5} strokeDasharray="2 2" />;
-                })()}
-              </svg>
+                    const temps = inferenceResult ? inferenceResult.temperatures_degC : profileData.tempEmbed;
+                    const depths = inferenceResult ? inferenceResult.depths_m : profileData.depths;
 
-              <div className="flex justify-between text-[9px] font-mono text-gray-400 mt-1 pt-1 border-t border-cyan-500/40">
-                <span>Avg: {profileData.avgTemp}°C</span>
-                <span>Min: {profileData.minTemp}°C</span>
-                <span>Max: {profileData.maxTemp}°C</span>
-              </div>
+                    // Locate 2 nodes in the thermocline zone
+                    const iStart = depths.findIndex(d => d >= thermStart) !== -1 ? depths.findIndex(d => d >= thermStart) : 4;
+                    const iEnd = depths.findIndex(d => d >= thermEnd) !== -1 ? depths.findIndex(d => d >= thermEnd) : 7;
+                    const pt1 = { x: tempToX(temps[iStart]), y: depthToY(depths[iStart]) };
+                    const pt2 = { x: tempToX(temps[iEnd]), y: depthToY(depths[iEnd]) };
+
+                    return (
+                      <div className="relative">
+                        <svg width={CW} height={chartH} className="overflow-visible">
+                          {/* Thermocline Highlighted Shaded Band */}
+                          <rect
+                            x={padL}
+                            y={yStart}
+                            width={plotW}
+                            height={yEnd - yStart}
+                            fill="rgba(251, 191, 36, 0.14)"
+                            stroke="rgba(251, 191, 36, 0.3)"
+                            strokeWidth={0.5}
+                            rx={3}
+                          />
+
+                          {/* Thermocline Start Line & Label */}
+                          <line
+                            x1={padL}
+                            y1={yStart}
+                            x2={CW - 6}
+                            y2={yStart}
+                            stroke="#f59e0b"
+                            strokeWidth={1.2}
+                            strokeDasharray="4 3"
+                          />
+                          <text
+                            x={CW - 4}
+                            y={yStart + 9}
+                            fill="#f59e0b"
+                            fontSize={8.5}
+                            fontWeight="bold"
+                            textAnchor="end"
+                            fontFamily="monospace"
+                          >
+                            Thermocline starts
+                          </text>
+
+                          {/* Thermocline End Line & Label */}
+                          <line
+                            x1={padL}
+                            y1={yEnd}
+                            x2={CW - 6}
+                            y2={yEnd}
+                            stroke="#f59e0b"
+                            strokeWidth={1.2}
+                            strokeDasharray="4 3"
+                          />
+                          <text
+                            x={CW - 4}
+                            y={yEnd + 9}
+                            fill="#f59e0b"
+                            fontSize={8.5}
+                            fontWeight="bold"
+                            textAnchor="end"
+                            fontFamily="monospace"
+                          >
+                            Thermocline ends
+                          </text>
+
+                          {/* Y-Axis Grid Lines & Depth Ticks */}
+                          {[0, 100, 200, 300, 500, 1000].map(d => {
+                            const y = depthToY(d);
+                            return (
+                              <g key={d}>
+                                <line x1={padL} y1={y} x2={padL + plotW} y2={y} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
+                                <text x={padL - 4} y={y + 3} fill="#9ca3af" fontSize={8} textAnchor="end" fontFamily="monospace">
+                                  {d === 0 ? '0' : `${d}m`}
+                                </text>
+                              </g>
+                            );
+                          })}
+
+                          {/* X-Axis Grid Ticks (°C) */}
+                          {[10, 15, 20, 25, 30].map(t => {
+                            const x = tempToX(t);
+                            return (
+                              <g key={t}>
+                                <line x1={x} y1={padT} x2={x} y2={padT + plotH} stroke="rgba(255,255,255,0.04)" strokeWidth={1} />
+                                <text x={x} y={chartH - 4} fill="#9ca3af" fontSize={8} textAnchor="middle" fontFamily="monospace">
+                                  {t}°C
+                                </text>
+                              </g>
+                            );
+                          })}
+
+                          {/* GLORYS Reference Curve (Dashed) */}
+                          {(() => {
+                            const pts = profileData.depths.map((d, i) => {
+                              const temp = profileData.tempGlorys[i];
+                              return `${i === 0 ? 'M' : 'L'} ${tempToX(temp)} ${depthToY(d)}`;
+                            }).join(' ');
+                            return <path d={pts} fill="none" stroke="#64748b" strokeWidth={1.4} strokeDasharray="3 2" />;
+                          })()}
+
+                          {/* Primary Model Curve T(z) (Bold Blue/Cyan) */}
+                          {(() => {
+                            const pts = depths.map((d, i) => {
+                              const temp = temps[i];
+                              return `${i === 0 ? 'M' : 'L'} ${tempToX(temp)} ${depthToY(d)}`;
+                            }).join(' ');
+                            return (
+                              <path
+                                d={pts}
+                                fill="none"
+                                stroke={inferenceResult ? '#34d399' : '#38bdf8'}
+                                strokeWidth={2.5}
+                              />
+                            );
+                          })()}
+
+                          {/* Rapid ΔT Annotation & Data Node Dots */}
+                          <circle cx={pt1.x} cy={pt1.y} r={3} fill="#38bdf8" stroke="#ffffff" strokeWidth={1.2} />
+                          <circle cx={pt2.x} cy={pt2.y} r={3} fill="#38bdf8" stroke="#ffffff" strokeWidth={1.2} />
+                          <text
+                            x={(pt1.x + pt2.x) / 2 + 5}
+                            y={(pt1.y + pt2.y) / 2 + 3}
+                            fill="#fbbf24"
+                            fontSize={9}
+                            fontWeight="bold"
+                            fontFamily="sans-serif"
+                          >
+                            rapid ΔT
+                          </text>
+
+                          {/* Selected Active Depth Marker */}
+                          {(() => {
+                            const depthY = depthToY(depth);
+                            return <line x1={padL} y1={depthY} x2={padL + plotW} y2={depthY} stroke="#f43f5e" strokeWidth={1.5} strokeDasharray="2 2" />;
+                          })()}
+                        </svg>
+
+                        {/* Caption at bottom */}
+                        <div className="text-[9px] text-gray-400 italic text-center mt-1 font-sans">
+                          Highlighted band = detected rapid temperature-change region.
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </>
+              )}
+
+              {!inferenceLoading && (
+                <div className="flex justify-between text-[9px] font-mono text-gray-400 mt-1 pt-1 border-t border-cyan-500/40">
+                  {inferenceResult ? (
+                    <>
+                      <span>Avg: {(inferenceResult.temperatures_degC.reduce((a, b) => a + b, 0) / 15).toFixed(1)}°C</span>
+                      <span>Min: {Math.min(...inferenceResult.temperatures_degC).toFixed(1)}°C</span>
+                      <span>Max: {Math.max(...inferenceResult.temperatures_degC).toFixed(1)}°C</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Avg: {profileData.avgTemp}°C</span>
+                      <span>Min: {profileData.minTemp}°C</span>
+                      <span>Max: {profileData.maxTemp}°C</span>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* Monthly Climatology mini-curve */}
-            <div className="bg-[#090c12] p-2 rounded-lg border border-white/[0.08]">
-              <div className="flex justify-between items-center text-[10px] font-mono text-gray-400 mb-1">
-                <span className="text-gray-200 font-semibold">Annual Climatology (Monthly thetao)</span>
-                <span className="text-gray-500 text-[9px]">t (Jan-Dec)</span>
+            {/* Tropical Cyclone Heat Potential (TCHP) Card */}
+            <div className="bg-[#090c12] p-2.5 rounded-lg border border-amber-500/30 bg-gradient-to-r from-amber-950/40 via-purple-950/20 to-rose-950/40 flex items-center justify-between">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-300">
+                  <AlertTriangle size={13} className="text-amber-400 animate-pulse shrink-0" />
+                  Cyclone Heat Potential (TCHP)
+                </div>
+                <div className="text-[9px] text-gray-400">
+                  Upper Ocean Heat Content (&gt;26°C isotherm)
+                </div>
               </div>
-              <svg width={CW} height={45} className="overflow-visible">
-                {(() => {
-                  const pts = annualData.points.map((p, i) => {
-                    const x = (i / 11) * (CW - 32);
-                    const y = 45 - ((p.temp - 22) / 10) * 45;
-                    return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
-                  }).join(' ');
-                  return <path d={pts} fill="none" stroke="#f59e0b" strokeWidth={1.6} />;
-                })()}
-              </svg>
+              <div className="text-right shrink-0">
+                <div className="text-[15px] font-mono font-black text-amber-300">
+                  {profileData.tchp} <span className="text-[10px] font-normal text-amber-400/80">kJ/cm²</span>
+                </div>
+                <span className={`text-[8px] font-bold px-1.5 py-0.2 rounded border inline-block ${
+                  profileData.tchp > 40
+                    ? 'bg-rose-950/80 text-rose-300 border-rose-700/60'
+                    : 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60'
+                }`}>
+                  {profileData.tchp > 40 ? 'High Cyclone Intensity Risk' : 'Low / Moderate Risk'}
+                </span>
+              </div>
             </div>
           </>
         )}
@@ -596,7 +1008,7 @@ function OceanEmbedProbeCard({ probe, screenPos, depth, year, dayOfYear, forecas
             <div className="text-[9px] text-gray-400 font-medium mb-1">
               Live Satellite Embedding Inputs (Surface → Subsurface Mapping):
             </div>
-            
+
             <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono">
               <div className="p-2 rounded bg-white/[0.03] border border-white/[0.06]">
                 <div className="text-[8px] text-gray-400 flex items-center gap-1">
@@ -661,11 +1073,43 @@ export default function App() {
   const [depth, setDepth] = useState(0);
   const [year, setYear] = useState(2024);
   const [dayOfYear, setDayOfYear] = useState(150);
-  const [forecastDays, setForecastDays] = useState(0); // 0 (Nowcast), +3d, +7d, +14d Lead
+  const [forecastDays, setForecastDays] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [opacity, setOpacity] = useState(0.92);
+  const [gridOpacity, setGridOpacity] = useState(0.85);
   const [activeTool, setActiveTool] = useState('point');
   const [showProbeCard, setShowProbeCard] = useState(true);
+
+  // ── 0.25° Grid Overlay State ──
+  const [showGrid, setShowGrid] = useState(true);
+  const [showGridLabels, setShowGridLabels] = useState(true);
+  const [snapToGrid, setSnapToGrid] = useState(false);
+  const [hoveredCell, setHoveredCell] = useState(null);
+
+  // ── Inference state ──────────────────────────────────────────────────────
+  const [inferenceResult, setInferenceResult] = useState(null);
+  const [inferenceLoading, setInferenceLoading] = useState(false);
+  const [inferenceError, setInferenceError] = useState(null);
+
+  const callInference = useCallback(async (lat, lon) => {
+    // Only call for ocean points within the model domain
+    if (lat < 5 || lat > 30 || lon < 45 || lon > 105) return;
+    setInferenceResult(null);
+    setInferenceError(null);
+    setInferenceLoading(true);
+    try {
+      const result = await fetchInferencePrediction({
+        latitude: lat,
+        longitude: lon,
+        datetime: new Date().toISOString(),
+      });
+      setInferenceResult(result);
+    } catch (err) {
+      console.warn('[OceanEmbed] Inference API error:', err.message);
+      setInferenceError(err.message);
+    } finally {
+      setInferenceLoading(false);
+    }
+  }, []);
 
   // 15 Depth levels from PPT
   const visibleDepths = [0, 50, 100, 200, 500, 1000];
@@ -685,10 +1129,11 @@ export default function App() {
 
   const TOOLS = [
     { id: 'point', icon: MousePointer, label: 'Point probe' },
-    { id: 'line',  icon: Activity,     label: 'Transect line' },
-    { id: 'area',  icon: Square,        label: 'Bounding area' },
-    { id: 'import',icon: Upload,        label: 'Import NetCDF/Zarr' },
-    { id: 'settings', icon: Settings,  label: 'Settings' },
+    { id: 'grid', icon: Grid, label: showGrid ? 'Hide 0.25° Grid' : 'Show 0.25° Grid' },
+
+
+    { id: 'import', icon: Upload, label: 'Download Data in NetCDF Format' },
+
   ];
 
   return (
@@ -717,11 +1162,20 @@ export default function App() {
           year={year}
           dayOfYear={dayOfYear}
           forecastDays={forecastDays}
-          opacity={opacity}
+          opacity={0.92}
         />
 
         {/* Vector Land GeoJSON Mask */}
         <LandVectorMask />
+
+        {/* Layer 3: 0.25° x 0.25° High-Precision Spatial Grid Mesh Overlay */}
+        <Grid025Overlay
+          enabled={showGrid}
+          showLabels={showGridLabels}
+          opacity={gridOpacity}
+          probe={probe}
+          hoveredCell={hoveredCell}
+        />
 
         {/* Active Marker */}
         <ProbeMarker lat={probe.lat} lon={probe.lon} />
@@ -729,12 +1183,17 @@ export default function App() {
         {/* Track Pin Position across map pan/zoom so info card stays anchored */}
         <MapPositionTracker probe={probe} setScreenPos={setScreenPos} />
 
-        {/* Click anywhere on the map */}
-        <MapClickHandler onCoordClick={(lat, lon, point) => {
-          setProbe({ lat, lon });
-          setScreenPos(point);
-          setShowProbeCard(true);
-        }} />
+        {/* Map Mouse Move & Click Handler (Support Snap to 0.25° Grid) */}
+        <MapMouseEvents
+          onCoordClick={(lat, lon, point) => {
+            setProbe({ lat, lon });
+            setScreenPos(point);
+            setShowProbeCard(true);
+            callInference(lat, lon);
+          }}
+          onCoordHover={setHoveredCell}
+          snapToGrid={snapToGrid}
+        />
       </MapContainer>
 
       {/* ══════════════════════════════════════════
@@ -802,18 +1261,25 @@ export default function App() {
           </div>
         </div>
 
-        {/* Forecast Lead Selection Pill Buttons */}
-        <div className="px-3.5 py-1.5 bg-gray-50 flex items-center justify-between text-[9px] font-mono border-t border-b border-gray-100">
-          <span className="text-gray-500 font-semibold">Forecast Mode:</span>
-          <div className="flex gap-1">
-            {[0, 3, 7, 14].map(fDays => (
+        {/* Forecast Lead Selection Pill Buttons (Prominent & Larger) */}
+        <div className="px-3.5 py-2.5 bg-gradient-to-r from-cyan-50/90 to-blue-50/70 border-t border-b border-cyan-100 flex flex-col gap-2">
+          <div className="flex items-center justify-between text-[11px] font-bold text-gray-800">
+            <span>Forecast Lead Mode:</span>
+            {forecastDays > 0 && (
+              <span className="text-[10px] font-mono text-cyan-700 bg-cyan-100 border border-cyan-300 px-1.5 py-0.2 rounded font-bold">
+                +{forecastDays} Days Ahead
+              </span>
+            )}
+          </div>
+          <div className="flex gap-1.5 flex-wrap">
+            {[0, 1, 2, 3, 7, 14].map(fDays => (
               <button
                 key={fDays}
                 onClick={() => setForecastDays(fDays)}
-                className={`px-1.5 py-0.5 rounded transition-all ${
+                className={`px-2.5 py-1 rounded-md text-[11px] font-mono font-bold transition-all shadow-sm ${
                   forecastDays === fDays
-                    ? 'bg-cyan-600 text-white font-bold'
-                    : 'text-gray-600 hover:bg-gray-200'
+                    ? 'bg-cyan-600 text-white ring-2 ring-cyan-400/50 scale-105'
+                    : 'bg-white text-gray-700 hover:bg-cyan-100 border border-gray-200'
                 }`}
               >
                 {fDays === 0 ? 'Now' : `+${fDays}d`}
@@ -822,37 +1288,21 @@ export default function App() {
           </div>
         </div>
 
-        {/* Opacity Slider */}
-        <div className="px-3.5 py-2 flex items-center gap-2">
-          <span className="text-[9px] text-gray-500 font-medium shrink-0">Opacity</span>
+        {/* Grid Opacity Slider */}
+        <div className="px-3.5 py-2.5 flex items-center gap-2 border-t border-gray-100">
+          <span className="text-[10px] text-gray-600 font-bold shrink-0">Grid Opacity</span>
           <input
             type="range"
-            min="0.2"
+            min="0.1"
             max="1"
             step="0.05"
-            value={opacity}
-            onChange={e => setOpacity(parseFloat(e.target.value))}
+            value={gridOpacity}
+            onChange={e => setGridOpacity(parseFloat(e.target.value))}
             className="flex-1 h-1.5 accent-cyan-600 cursor-pointer"
           />
-          <span className="text-[9px] font-mono font-semibold text-gray-600 w-7 text-right">
-            {Math.round(opacity * 100)}%
+          <span className="text-[10px] font-mono font-bold text-gray-700 w-8 text-right">
+            {Math.round(gridOpacity * 100)}%
           </span>
-        </div>
-
-        {/* Card Footer Toolbar */}
-        <div className="border-t border-gray-100 px-3.5 py-1.5 flex items-center justify-between bg-gray-50/50">
-          <div className="flex gap-1.5">
-            {[Download, Info, Layers, Settings].map((Icon, i) => (
-              <button key={i} className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-200/60 transition-colors">
-                <Icon size={13} />
-              </button>
-            ))}
-          </div>
-          {probeSST !== null && (
-            <span className="text-[10px] font-mono font-bold text-cyan-800 bg-cyan-100/70 border border-cyan-300/80 px-2 py-0.5 rounded shadow-sm">
-              {probeSST.toFixed(2)}°C @ probe
-            </span>
-          )}
         </div>
       </div>
 
@@ -865,7 +1315,9 @@ export default function App() {
           year={year}
           dayOfYear={dayOfYear}
           forecastDays={forecastDays}
-          onClose={() => setShowProbeCard(false)}
+          onClose={() => { setShowProbeCard(false); }}
+          inferenceResult={inferenceResult}
+          inferenceLoading={inferenceLoading}
         />
       )}
 
@@ -887,10 +1339,15 @@ export default function App() {
           {TOOLS.map(({ id, icon: Icon, label }) => (
             <button
               key={id}
-              onClick={() => setActiveTool(id)}
+              onClick={() => {
+                if (id === 'grid') {
+                  setShowGrid(g => !g);
+                }
+                setActiveTool(id);
+              }}
               title={label}
               className={`w-10 h-10 flex items-center justify-center transition-all border-b border-white/[0.05] last:border-b-0
-                ${activeTool === id
+                ${activeTool === id || (id === 'grid' && showGrid)
                   ? 'bg-cyan-500/20 text-cyan-300 font-bold'
                   : 'text-gray-400 hover:text-white hover:bg-white/[0.06]'
                 }`}
@@ -931,95 +1388,30 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── BOTTOM TIMELINE BAR ── */}
-      <div className="absolute bottom-0 left-0 right-0 z-[1100] h-14 bg-[#0a0e1a]/90 backdrop-blur-md border-t border-white/[0.08] flex items-center px-4 gap-4">
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            onClick={() => setYear(y => Math.max(2005, y - 1))}
-            className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-white transition-colors"
-          >
-            <SkipBack size={13} />
-          </button>
-          <button
-            onClick={() => setYear(y => Math.max(2005, y - 1))}
-            className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-white transition-colors"
-          >
-            <ChevronLeft size={13} />
-          </button>
-          <button
-            onClick={() => setIsPlaying(p => !p)}
-            className={`w-8 h-8 flex items-center justify-center rounded-full transition-all shadow-md
-              ${isPlaying ? 'bg-cyan-500 text-white ring-2 ring-cyan-400/40' : 'bg-white/10 text-white hover:bg-white/20'}`}
-          >
-            {isPlaying ? <Pause size={13} fill="white" /> : <Play size={13} fill="currentColor" />}
-          </button>
-          <button
-            onClick={() => setYear(y => Math.min(2026, y + 1))}
-            className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-white transition-colors"
-          >
-            <ChevronRight size={13} />
-          </button>
-          <button
-            onClick={() => setYear(y => Math.min(2026, y + 1))}
-            className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-white transition-colors"
-          >
-            <SkipForward size={13} />
-          </button>
-        </div>
-
-        <div className="shrink-0 bg-cyan-950/70 border border-cyan-500/40 rounded px-2.5 py-1 font-mono text-[11px] text-cyan-300 font-bold shadow-sm">
-          {year}
-        </div>
-
-        <div className="flex-1 flex flex-col justify-center gap-1">
-          <input
-            type="range"
-            min="2005"
-            max="2026"
-            step="1"
-            value={year}
-            onChange={e => { setIsPlaying(false); setYear(parseInt(e.target.value)); }}
-            className="w-full accent-cyan-400 cursor-pointer h-1.5 bg-gray-700 rounded-lg"
-          />
-          <div className="flex justify-between text-[8px] font-mono text-gray-400 px-0.5">
-            {Array.from({ length: 22 }, (_, i) => 2005 + i).map(y => (
-              <span
-                key={y}
-                className={`cursor-pointer transition-colors hover:text-white ${y === year ? 'text-cyan-400 font-bold scale-110' : ''}`}
-                onClick={() => setYear(y)}
-              >
-                {y % 5 === 0 ? y : '·'}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <div className="shrink-0 flex items-center gap-2 pl-3 border-l border-white/[0.08]">
-          <div className="flex flex-col items-center">
-            <span className="text-[8px] text-gray-400 font-mono uppercase">Season</span>
-            <input
-              type="range"
-              min="1"
-              max="365"
-              step="1"
-              value={dayOfYear}
-              onChange={e => setDayOfYear(parseInt(e.target.value))}
-              className="w-16 accent-fuchsia-400 cursor-pointer h-1.5"
-            />
-            <span className="text-[9px] font-mono font-semibold text-fuchsia-300">
-              {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Math.floor((dayOfYear - 1) / 30.5)]}
+      {/* ── COORDINATE & GRID HUD ── */}
+      <div className="absolute bottom-4 left-4 z-[1100] bg-[#0a0e1a]/90 border border-white/10 backdrop-blur-md rounded-lg px-3 py-1.5 font-mono text-[10px] text-gray-300 flex items-center gap-3 shadow-xl">
+        <span className="flex items-center gap-1.5 font-medium text-cyan-300">
+          <Grid size={12} className="text-cyan-400" />
+          🎯 Probe: {Math.abs(probe.lon).toFixed(3)}°{probe.lon >= 0 ? 'E' : 'W'}, {Math.abs(probe.lat).toFixed(3)}°{probe.lat >= 0 ? 'N' : 'S'}
+          {probe.lat >= 5 && probe.lat <= 30 && probe.lon >= 45 && probe.lon <= 105 && (
+            <span className="text-[9px] bg-cyan-950/80 text-cyan-300 border border-cyan-800/60 px-1.5 py-0.2 rounded ml-1 font-bold">
+              Cell [{Math.floor((probe.lat - 5) / 0.25)}, {Math.floor((probe.lon - 45) / 0.25)}]
             </span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── COORDINATE HUD ── */}
-      <div className="absolute bottom-16 left-4 z-[1100] bg-[#0a0e1a]/85 border border-white/10 backdrop-blur-md rounded-md px-2.5 py-1 font-mono text-[10px] text-gray-300 flex items-center gap-3 shadow-lg">
-        <span className="flex items-center gap-1 font-medium">
-          🎯 {Math.abs(probe.lon).toFixed(3)}°{probe.lon >= 0 ? 'E' : 'W'}, {Math.abs(probe.lat).toFixed(3)}°{probe.lat >= 0 ? 'N' : 'S'}
+          )}
         </span>
+        {hoveredCell && hoveredCell.lat >= 5 && hoveredCell.lat <= 30 && hoveredCell.lon >= 45 && hoveredCell.lon <= 105 && (
+          <span className="border-l border-white/15 pl-3 text-pink-300 hidden md:flex items-center gap-1.5">
+            <span>Hover:</span>
+            <span className="font-bold">
+              {Math.abs(hoveredCell.lon).toFixed(2)}°E, {Math.abs(hoveredCell.lat).toFixed(2)}°N
+            </span>
+            <span className="text-[8px] bg-pink-950/80 border border-pink-800/60 px-1 rounded text-pink-200">
+              0.25° Mesh
+            </span>
+          </span>
+        )}
         {!isProbeLand && (
-          <span className="border-l border-white/15 pl-2.5 text-cyan-400">
+          <span className="border-l border-white/15 pl-2.5 text-cyan-400 font-semibold hidden lg:inline">
             {probe.lon > 80 ? 'Bay of Bengal' : 'Arabian Sea'}
           </span>
         )}
