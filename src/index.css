@@ -41,3 +41,13 @@ input[type=range] {
   font-family: 'Outfit', system-ui, sans-serif;
   box-sizing: border-box;
 }
+
+/* GLOBAL LIGHT MODE HACK */
+html[data-theme="light"] {
+  filter: invert(1) hue-rotate(180deg);
+  background: white !important;
+}
+
+html[data-theme="light"] body {
+  background: transparent !important; /* Ensure html background shows through */
+}
