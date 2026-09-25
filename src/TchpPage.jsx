@@ -540,6 +540,7 @@ export default function TchpPage() {
             </div>
             <TchpMap
               region={region}
+              regionId={regionId}
               layer={layer}
               selectedPoint={selectedPoint}
               onSelect={(point) => {
