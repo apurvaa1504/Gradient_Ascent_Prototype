@@ -1,0 +1,45 @@
+.map-surface { transition: filter .25s ease, opacity .25s ease; }
+.map-stage { position: relative; }
+.map-tooltip { position: absolute; top: 16px; right: 16px; z-index: 2; display: grid; gap: 5px; min-width: 170px; padding: 11px 12px; border: 1px solid rgba(151, 224, 220, .35); border-radius: 7px; background: rgba(4, 18, 25, .92); color: #b4d8dc; box-shadow: 0 12px 28px rgba(0,0,0,.32); font: 10px 'JetBrains Mono', monospace; pointer-events: none; }
+.map-tooltip b { color: #effffc; font-size: 11px; }
+.map-tooltip span { display: flex; justify-content: space-between; gap: 15px; }
+.map-tooltip strong { color: #ffd07b; font-weight: 500; }
+.map-tooltip em { color: #65d7c8; font-style: normal; border-top: 1px solid #244650; padding-top: 5px; }
+.tchp-map > svg { display: block; width: 100%; height: 420px; cursor: crosshair; }
+.map-caption svg { width: 12px; height: 12px; flex: none; }
+.map-surface.layer-d26-depth { filter: hue-rotate(35deg) saturate(.9) brightness(1.1); }
+.map-surface.layer-sst-anomaly { filter: hue-rotate(-25deg) saturate(1.3) brightness(1.05); }
+.map-surface.layer-100m-anomaly { filter: hue-rotate(80deg) saturate(1.2) brightness(.95); }
+.alert-row { width: 100%; display: flex; align-items: center; gap: 9px; text-align: left; color: inherit; background: transparent; border: 0; border-top: 1px solid #193944; padding: 11px 0; cursor: pointer; }
+.alert-row:hover { background: rgba(79, 190, 185, .07); }
+.corridor-node { border: 0; background: transparent; cursor: pointer; }
+.corridor-node:hover b { color: #fff0ba; }
+.kpi-card, .evidence-chips span { cursor: help; }
+.map-point { cursor: pointer; }
+.map-point:focus-visible circle:first-child { stroke: #fff0ad; stroke-width: 1; }
+.text-button { border: 0; background: transparent; padding: 0; color: #60d6c7; font: 10px 'JetBrains Mono', monospace; cursor: pointer; }
+.text-button:hover { color: #fff0bd; }
+.confidence-block { border-top: 1px solid #193842; margin-top: 16px; padding-top: 12px; }
+.confidence-block>b { display: block; color: #ccebe9; font-size: 11px; margin-bottom: 9px; }
+.confidence-block>div { display: grid; grid-template-columns: 1fr 1.2fr 30px; align-items: center; gap: 7px; margin: 6px 0; color: #799aa3; font-size: 10px; }
+.confidence-block i { height: 5px; overflow: hidden; border-radius: 5px; background: #183139; }
+.confidence-block i em { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#29baa9,#e9b254); }
+.confidence-block small { color: #b4d8d8; font: 9px 'JetBrains Mono', monospace; }
+.data-table { margin-top: 13px; max-height: 300px; overflow: auto; border: 1px solid #193f4a; border-radius: 5px; }
+.data-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr; gap: 5px; padding: 7px 8px; border-bottom: 1px solid #16343e; color: #abc9ce; font: 9px 'JetBrains Mono', monospace; }
+.data-row:last-child { border-bottom: 0; }
+.data-head { position: sticky; top: 0; background: #0d2932; color: #71a0a8; }
+.amber-text { color: #f2bb67; }
+.method-panel { margin-top: 12px; border: 1px solid rgba(119,192,201,.18); border-radius: 8px; background: rgba(10,31,40,.82); }
+.method-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; border: 0; background: transparent; color: #d7efed; padding: 16px 18px; cursor: pointer; font-size: 14px; text-align: left; }
+.method-toggle span { display: flex; gap: 8px; align-items: center; }
+.method-toggle svg { color: #5bd3c3; transition: transform .2s ease; }
+.method-toggle svg.rotate { transform: rotate(180deg); }
+.method-content { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; padding: 0 18px 18px; }
+.method-content>div:not(.method-flow) { border: 1px solid #1c4651; border-radius: 5px; padding: 12px; background: #091e27; }
+.method-content b { color: #f6c470; font-size: 12px; }
+.method-content p { color: #86a6ad; font-size: 11px; line-height: 1.5; margin: 7px 0 0; }
+.method-flow { grid-column: 1/-1; color: #76d9cb; font: 11px 'JetBrains Mono', monospace; text-align: center; padding: 10px; border-top: 1px solid #19434e; }
+.provenance p { color: #91afb5; font-size: 11px; line-height: 1.6; margin: 8px 0; }
+.provenance b { color: #c8ebe6; }
+@media (max-width: 700px) { .method-content { grid-template-columns: 1fr; } .map-tooltip { top: 8px; right: 8px; } .confidence-block>div { grid-template-columns: 1fr 1fr 30px; } }
