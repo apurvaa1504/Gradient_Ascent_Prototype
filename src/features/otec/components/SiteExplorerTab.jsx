@@ -6,6 +6,7 @@ import { otecTheme } from '../otec-theme';
 import { SectionCard, StatusBadge, InfoTooltip } from './SharedComponents';
 import { MapPin, Filter, Layers, Database, Droplet, Ship, Check, Eye, PlusCircle, ExternalLink, Thermometer, BarChart2 } from 'lucide-react';
 import { SITES } from '../mock-data/sites';
+import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, ReferenceLine, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, ErrorBar, Area } from 'recharts';
 
 // Fix for default leaflet icons not showing in React properly
 delete L.Icon.Default.prototype._getIconUrl;
@@ -97,6 +98,43 @@ export default function SiteExplorerTab({ selectedSiteId, setSelectedSiteId, com
     [[5, 80], [15, 90]],
     [[8, 70], [12, 75]]
   ];
+
+  // Generated mock data for Bottom Charts based on selectedSite
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthlyData = months.map((m, i) => {
+    const isWorstSeason = i >= 5 && i <= 8; // Monsoon season approx
+    let val = isWorstSeason ? selectedSite.worstMonthDeltaT : selectedSite.meanDeltaT + (Math.sin(i) * 0.5);
+    if (i === 6) val = selectedSite.worstMonthDeltaT; // guarantee worst month
+    return {
+      month: m,
+      deltaT: Number(val.toFixed(1)),
+      error: [0.4, 0.5] // mock variance for error bars
+    };
+  });
+
+  const depths = [300, 400, 500, 600, 700, 800, 900, 1000];
+  const tradeoffData = depths.map(d => {
+    // scale deltaT down as depth decreases
+    const dt = selectedSite.meanDeltaT - ((1000 - d) / 100) * 0.6;
+    const power = capacity * ((dt - 18) / 4) * 1000;
+    const cost = Math.exp(d / 400) * 5; // mock exponential pipe cost curve
+    return {
+      depth: d,
+      deltaT: Number(dt.toFixed(1)),
+      power: Math.max(0, Math.round(power)),
+      cost: Number(cost.toFixed(1))
+    };
+  });
+
+  const bathyProfileData = Array.from({length: 21}, (_, i) => {
+    const dist = i * 0.25; // 0 to 5km
+    const depth = dist === 0 ? 0 : Math.pow(dist, 1.8) * 80;
+    return {
+      distance: dist,
+      seabed: Number(depth.toFixed(0)),
+      pipe: dist <= (selectedSite.pipeLengthMeters/1000) ? Number((depth - 10).toFixed(0)) : null
+    };
+  });
 
   return (
     <div className="flex flex-col gap-6 h-full relative">
@@ -440,6 +478,86 @@ export default function SiteExplorerTab({ selectedSiteId, setSelectedSiteId, com
              </div>
            </SectionCard>
         </div>
+
+      </div>
+
+      {/* Bottom Charts Row (Tab 2 Step 7) */}
+      <div className="grid grid-cols-3 gap-6">
+        
+        {/* 1. Monthly Thermal Gradient */}
+        <SectionCard title="Monthly Thermal Gradient">
+          <div className="h-[220px] w-full mt-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={monthlyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="rgba(255,255,255,0.05)" />
+                <XAxis dataKey="month" tick={{fill: otecTheme.colors.textSecondary, fontSize: 10}} />
+                <YAxis domain={[15, 26]} tick={{fill: otecTheme.colors.textSecondary, fontSize: 10}} />
+                <RechartsTooltip 
+                  contentStyle={{ backgroundColor: '#122A3E', border: '1px solid rgba(255,255,255,0.1)', fontSize: '11px' }}
+                  cursor={{fill: 'rgba(255,255,255,0.05)'}}
+                />
+                <Bar dataKey="deltaT" name="Average ΔT (°C)">
+                  {monthlyData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.deltaT < 20 ? 'rgba(224, 82, 77, 0.7)' : otecTheme.colors.accentTeal} />
+                  ))}
+                  {/* Recharts ErrorBar component for whiskers */}
+                  <ErrorBar dataKey="error" width={4} strokeWidth={1} stroke={otecTheme.colors.textMain} />
+                </Bar>
+                <ReferenceLine y={20} stroke={otecTheme.colors.statusRed} strokeDasharray="4 4" label={{ position: 'insideTopLeft', value: '20°C Viability Threshold', fill: otecTheme.colors.statusRed, fontSize: 9 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </SectionCard>
+
+        {/* 2. Intake-Depth Trade-off */}
+        <SectionCard title="Intake-Depth Trade-off">
+          <div className="flex flex-col h-full gap-2">
+            <div className="h-[200px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={tradeoffData} margin={{ top: 10, right: 5, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="rgba(255,255,255,0.05)" />
+                  <XAxis dataKey="depth" tick={{fill: otecTheme.colors.textSecondary, fontSize: 10}} unit="m" />
+                  <YAxis yAxisId="left" domain={[15, 25]} tick={{fill: otecTheme.colors.accentTeal, fontSize: 10}} />
+                  <YAxis yAxisId="right" orientation="right" tick={{fill: otecTheme.colors.statusAmber, fontSize: 10}} />
+                  <RechartsTooltip contentStyle={{ backgroundColor: '#122A3E', border: '1px solid rgba(255,255,255,0.1)', fontSize: '11px' }} />
+                  <Line yAxisId="left" type="monotone" dataKey="deltaT" stroke={otecTheme.colors.accentTeal} strokeWidth={2} name="ΔT (°C)" />
+                  <Line yAxisId="right" type="monotone" dataKey="power" stroke={otecTheme.colors.statusAmber} strokeWidth={2} name="Power (kW)" />
+                  <Line yAxisId="left" type="monotone" dataKey="cost" stroke="#9FB3C4" strokeWidth={1.5} strokeDasharray="4 4" dot={false} name="Pipe Cost Proxy" />
+                  <ReferenceLine x={selectedSite.recommendedIntakeDepth} yAxisId="left" stroke="rgba(255,255,255,0.3)" strokeDasharray="3 3" label={{ position: 'insideTopLeft', value: 'Recommended', fill: 'white', fontSize: 9 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="mt-auto text-center text-[10px] italic text-[#9FB3C4]">
+              How much additional power do we gain by using a deeper, more expensive pipe?
+            </div>
+          </div>
+        </SectionCard>
+
+        {/* 3. Bathymetry Cross-Section */}
+        <SectionCard title="Bathymetry Cross-Section">
+          <div className="flex flex-col h-full gap-2">
+            <div className="h-[200px] w-full relative">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={bathyProfileData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="rgba(255,255,255,0.05)" />
+                  <XAxis dataKey="distance" type="number" domain={[0, 5]} tick={{fill: otecTheme.colors.textSecondary, fontSize: 10}} unit="km" />
+                  <YAxis dataKey="seabed" reversed={true} domain={[0, 1200]} tick={{fill: otecTheme.colors.textSecondary, fontSize: 10}} unit="m" />
+                  <RechartsTooltip contentStyle={{ backgroundColor: '#122A3E', border: '1px solid rgba(255,255,255,0.1)', fontSize: '11px' }} />
+                  <Area type="monotone" dataKey="seabed" fill="#1A3347" stroke="#9FB3C4" strokeWidth={2} name="Seabed Profile" />
+                  <Line type="monotone" dataKey="pipe" stroke={otecTheme.colors.accentTeal} strokeWidth={2} dot={false} name="Cold Water Pipe" />
+                  
+                  {/* Highlight Contours via ReferenceLines mapping to roughly accurate distances in the mock data */}
+                  <ReferenceLine y={500} stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3" label={{ position: 'insideTopLeft', value: '500m Contour', fill: 'rgba(255,255,255,0.4)', fontSize: 9 }} />
+                  <ReferenceLine y={700} stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3" label={{ position: 'insideTopLeft', value: '700m Contour', fill: 'rgba(255,255,255,0.4)', fontSize: 9 }} />
+                  <ReferenceLine y={1000} stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3" label={{ position: 'insideTopLeft', value: '1000m Contour', fill: 'rgba(255,255,255,0.4)', fontSize: 9 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="mt-auto text-center text-[10px] italic text-[#9FB3C4]">
+              Shorter distance to deep water = lower pipe cost and construction risk.
+            </div>
+          </div>
+        </SectionCard>
 
       </div>
 
