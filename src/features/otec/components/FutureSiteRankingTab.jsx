@@ -1,10 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { otecTheme } from '../otec-theme';
 import { SectionCard, StatusBadge, InfoTooltip } from './SharedComponents';
-import { Filter, ChevronDown, ChevronUp, MapPin, Target, Activity, Settings2, BarChart2 } from 'lucide-react';
+import { Filter, ChevronDown, ChevronUp, MapPin, Target, Activity, Settings2, BarChart2, Download, FileText, X, ArrowUp, ArrowDown } from 'lucide-react';
 import { SITES } from '../mock-data/sites';
 
-export default function FutureSiteRankingTab({ compareList, setCompareList }) {
+export default function FutureSiteRankingTab({ compareList, setCompareList, setActiveTab, setSelectedSiteId }) {
   // Filter States
   const [region, setRegion] = useState('All');
   const [minGradient, setMinGradient] = useState(20);
@@ -119,6 +119,97 @@ export default function FutureSiteRankingTab({ compareList, setCompareList }) {
 
   const highPotentialSites = filteredSites.filter(s => s.suitabilityScore > 75);
 
+  // Table Sorting
+  const [sortConfig, setSortConfig] = useState({ key: 'suitabilityScore', direction: 'desc' });
+
+  const sortedSites = useMemo(() => {
+    let sortableItems = [...filteredSites];
+    if (sortConfig !== null) {
+      sortableItems.sort((a, b) => {
+        let valA = a[sortConfig.key];
+        let valB = b[sortConfig.key];
+        
+        // Handle calculated power for sorting
+        if (sortConfig.key === 'power') {
+          valA = capacity * ((a.meanDeltaT - 18) / 4) * 1000;
+          valB = capacity * ((b.meanDeltaT - 18) / 4) * 1000;
+        }
+
+        if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [filteredSites, sortConfig, capacity]);
+
+  const requestSort = (key) => {
+    let direction = 'desc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'desc') {
+      direction = 'asc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const getSortIcon = (key) => {
+    if (sortConfig?.key === key) {
+      return sortConfig.direction === 'asc' ? <ArrowUp size={12} className="ml-1 inline" /> : <ArrowDown size={12} className="ml-1 inline" />;
+    }
+    return null;
+  };
+
+  // Compare Checkbox
+  const handleToggleCompare = (id) => {
+    if (compareList.includes(id)) {
+      setCompareList(compareList.filter(item => item !== id));
+    } else {
+      if (compareList.length >= 3) {
+        alert('Maximum 3 sites can be compared.');
+        return;
+      }
+      setCompareList([...compareList, id]);
+    }
+  };
+
+  // Navigation
+  const handleSiteNav = (id) => {
+    setSelectedSiteId(id);
+    setActiveTab("Site Explorer");
+  };
+
+  // Export CSV
+  const exportToCSV = () => {
+    const headers = ['Rank', 'Site Name', 'Region', 'Suitability Score', 'Mean Delta T', 'Worst-Month Delta T', 'Viable Days (%)', 'Intake Depth (m)', 'Pipe Length (m)', 'Gross Power (kW)', 'Environmental Flag'];
+    const rows = sortedSites.map((site, index) => {
+      const power = capacity * ((site.meanDeltaT - 18) / 4) * 1000;
+      return [
+        index + 1,
+        `"${site.name}"`,
+        `"${site.region}"`,
+        site.suitabilityScore,
+        site.meanDeltaT,
+        site.worstMonthDeltaT,
+        site.reliability,
+        site.recommendedIntakeDepth,
+        site.pipeLengthMeters,
+        Math.round(power),
+        `"${site.environmentalFlag}"`
+      ].join(',');
+    });
+    
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "otec_site_ranking.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Modal
+  const [showModal, setShowModal] = useState(false);
+  
   return (
     <div className="flex flex-col gap-6 h-full pb-8">
       {/* Page Title */}
@@ -271,12 +362,137 @@ export default function FutureSiteRankingTab({ compareList, setCompareList }) {
         </div>
       </div>
 
-      {/* Step 9 Table Placeholder */}
+      {/* Step 9 Table */}
       <SectionCard title="Candidate Ranking Table">
-        <div className="h-[300px] flex items-center justify-center border-2 border-dashed border-white/5 rounded-lg text-[#9FB3C4] text-[13px]">
-          Ranking Table (Step 9) will render here.
+        <div className="flex justify-between items-end mb-4">
+          <div className="text-[12px] text-[#9FB3C4]">
+            Select up to 3 sites to generate a comparison report or export the current filtered list.
+          </div>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setShowModal(true)}
+              disabled={compareList.length !== 1}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[12px] font-medium transition-colors border ${compareList.length === 1 ? 'bg-[#2FB8C9]/20 text-[#2FB8C9] border-[#2FB8C9]/30 hover:bg-[#2FB8C9]/30 cursor-pointer' : 'bg-transparent text-[#9FB3C4]/50 border-white/10 cursor-not-allowed'}`}
+            >
+              <FileText size={14} />
+              Generate site briefing
+            </button>
+            <button 
+              onClick={exportToCSV}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded text-[12px] font-medium transition-colors cursor-pointer"
+            >
+              <Download size={14} />
+              Export to CSV
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto border border-white/10 rounded-lg">
+          <table className="w-full text-left text-[12px] border-collapse whitespace-nowrap">
+            <thead className="bg-[#0B1B2B] text-[#9FB3C4] border-b border-white/10">
+              <tr>
+                <th className="py-2.5 px-3 font-medium text-center w-10">Compare</th>
+                <th className="py-2.5 px-3 font-medium cursor-pointer hover:text-white" onClick={() => requestSort('suitabilityScore')}>Rank {getSortIcon('suitabilityScore')}</th>
+                <th className="py-2.5 px-3 font-medium cursor-pointer hover:text-white" onClick={() => requestSort('name')}>Site {getSortIcon('name')}</th>
+                <th className="py-2.5 px-3 font-medium cursor-pointer hover:text-white" onClick={() => requestSort('suitabilityScore')}>Suitability Score {getSortIcon('suitabilityScore')}</th>
+                <th className="py-2.5 px-3 font-medium cursor-pointer hover:text-white" onClick={() => requestSort('meanDeltaT')}>Mean ΔT {getSortIcon('meanDeltaT')}</th>
+                <th className="py-2.5 px-3 font-medium cursor-pointer hover:text-white" onClick={() => requestSort('worstMonthDeltaT')}>Worst-Month ΔT {getSortIcon('worstMonthDeltaT')}</th>
+                <th className="py-2.5 px-3 font-medium cursor-pointer hover:text-white" onClick={() => requestSort('reliability')}>Viable Days {getSortIcon('reliability')}</th>
+                <th className="py-2.5 px-3 font-medium cursor-pointer hover:text-white" onClick={() => requestSort('recommendedIntakeDepth')}>Rec. Depth {getSortIcon('recommendedIntakeDepth')}</th>
+                <th className="py-2.5 px-3 font-medium cursor-pointer hover:text-white" onClick={() => requestSort('pipeLengthMeters')}>Est. Pipe {getSortIcon('pipeLengthMeters')}</th>
+                <th className="py-2.5 px-3 font-medium cursor-pointer hover:text-white" onClick={() => requestSort('power')}>Gross Power ({capacity}MW) {getSortIcon('power')}</th>
+                <th className="py-2.5 px-3 font-medium cursor-pointer hover:text-white" onClick={() => requestSort('environmentalFlag')}>Env. Flag {getSortIcon('environmentalFlag')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedSites.map((site, idx) => {
+                const power = capacity * ((site.meanDeltaT - 18) / 4) * 1000;
+                const isSelected = compareList.includes(site.id);
+                return (
+                  <tr key={site.id} className={`border-b border-white/5 transition-colors ${isSelected ? 'bg-[#3FBF7F]/10' : 'hover:bg-white/5'}`}>
+                    <td className="py-2.5 px-3 text-center">
+                      <input 
+                        type="checkbox" 
+                        checked={isSelected}
+                        onChange={() => handleToggleCompare(site.id)}
+                        className="accent-[#3FBF7F] cursor-pointer"
+                      />
+                    </td>
+                    <td className="py-2.5 px-3 font-bold text-white">#{idx + 1}</td>
+                    <td className="py-2.5 px-3 font-medium text-[#2FB8C9] cursor-pointer hover:underline" onClick={() => handleSiteNav(site.id)}>
+                      {site.name}
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono">{site.suitabilityScore.toFixed(1)}</span>
+                        <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                          <div className="h-full bg-[#2FB8C9]" style={{ width: `${site.suitabilityScore}%` }}></div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-2.5 px-3 font-mono">{site.meanDeltaT.toFixed(1)}°C</td>
+                    <td className={`py-2.5 px-3 font-mono ${site.worstMonthDeltaT < 20 ? 'text-[#E0524D]' : ''}`}>{site.worstMonthDeltaT.toFixed(1)}°C</td>
+                    <td className="py-2.5 px-3 font-mono">{site.reliability}%</td>
+                    <td className="py-2.5 px-3 font-mono">{site.recommendedIntakeDepth} m</td>
+                    <td className="py-2.5 px-3 font-mono">{(site.pipeLengthMeters/1000).toFixed(1)} km</td>
+                    <td className="py-2.5 px-3 font-mono">{Math.round(power).toLocaleString()} kW</td>
+                    <td className="py-2.5 px-3">
+                      {site.environmentalFlag !== 'None' ? (
+                        <span className="text-[10px] uppercase text-[#E0A82E] font-bold border border-[#E0A82E]/30 bg-[#E0A82E]/10 px-1.5 py-0.5 rounded">
+                          {site.environmentalFlag}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] uppercase text-[#9FB3C4]">-</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {sortedSites.length === 0 && (
+                <tr>
+                  <td colSpan="11" className="py-8 text-center text-[#9FB3C4]">No sites match the current filter criteria.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </SectionCard>
+
+      {/* Briefing Modal */}
+      {showModal && compareList.length === 1 && (
+        <div className="fixed inset-0 z-[2000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0B1B2B] border border-[#2FB8C9]/30 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col">
+            <div className="bg-[#122A3E] px-4 py-3 flex items-center justify-between border-b border-white/10">
+              <h3 className="font-bold text-white flex items-center gap-2">
+                <FileText size={16} className="text-[#2FB8C9]" />
+                Site Briefing
+              </h3>
+              <button onClick={() => setShowModal(false)} className="text-[#9FB3C4] hover:text-white transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-5 text-[13px] text-[#F2F6F8] flex flex-col gap-4">
+              <p>
+                <strong>{SITES.find(s => s.id === compareList[0])?.name}</strong> is a high-potential candidate for a <strong>{capacity} MW</strong> OTEC facility.
+              </p>
+              <div className="bg-white/5 p-3 rounded border border-white/5 font-mono text-[12px] leading-relaxed">
+                Region: {SITES.find(s => s.id === compareList[0])?.region}<br/>
+                Mean Thermal Gradient: {SITES.find(s => s.id === compareList[0])?.meanDeltaT.toFixed(1)}°C<br/>
+                Reliability Window: {SITES.find(s => s.id === compareList[0])?.reliability}% of year<br/>
+                Infrastructure Constraint: {SITES.find(s => s.id === compareList[0])?.environmentalFlag}
+              </div>
+              <p className="text-[#9FB3C4]">
+                This is a preliminary AI-generated summary derived from reconstructed ocean profiles. A full marine survey is legally required before front-end engineering design (FEED).
+              </p>
+            </div>
+            <div className="p-4 border-t border-white/10 flex justify-end">
+              <button onClick={() => setShowModal(false)} className="px-4 py-1.5 bg-[#2FB8C9] text-[#0B1B2B] font-medium rounded text-[13px] hover:bg-[#2FB8C9]/90 transition-colors">
+                Close Briefing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

@@ -571,7 +571,12 @@ export default function OtecApp() {
         )}
         
         {activeTab === "Future Site Ranking" && (
-          <FutureSiteRankingTab compareList={compareList} setCompareList={setCompareList} />
+          <FutureSiteRankingTab 
+            compareList={compareList} 
+            setCompareList={setCompareList}
+            setActiveTab={setActiveTab}
+            setSelectedSiteId={setSelectedSiteId}
+          />
         )}
       </main>
     </div>
