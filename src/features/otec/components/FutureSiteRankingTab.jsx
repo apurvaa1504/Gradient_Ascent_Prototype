@@ -3,6 +3,7 @@ import { otecTheme } from '../otec-theme';
 import { SectionCard, StatusBadge, InfoTooltip } from './SharedComponents';
 import { Filter, ChevronDown, ChevronUp, MapPin, Target, Activity, Settings2, BarChart2, Download, FileText, X, ArrowUp, ArrowDown } from 'lucide-react';
 import { SITES } from '../mock-data/sites';
+import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, ReferenceLine, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, ScatterChart, Scatter, ZAxis, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ReferenceArea } from 'recharts';
 
 export default function FutureSiteRankingTab({ compareList, setCompareList, setActiveTab, setSelectedSiteId }) {
   // Filter States
@@ -207,8 +208,86 @@ export default function FutureSiteRankingTab({ compareList, setCompareList, setA
     document.body.removeChild(link);
   };
 
-  // Modal
-  const [showModal, setShowModal] = useState(false);
+  // Prepare Data for Charts
+  const focusedSiteId = compareList.length > 0 ? compareList[0] : (sortedSites[0]?.id || null);
+  const focusedSite = sortedSites.find(s => s.id === focusedSiteId) || sortedSites[0];
+  
+  // 1. Scatter Plot Data
+  const scatterData = sortedSites.map(s => ({
+    id: s.id,
+    name: s.name,
+    pipeLength: s.pipeLengthMeters / 1000,
+    meanDeltaT: s.meanDeltaT,
+    reliability: s.reliability,
+    score: s.suitabilityScore
+  }));
+
+  // 2. Year-Round Reliability (Box/Range)
+  const top5Sites = sortedSites.slice(0, 5).map(s => {
+    // Generate a min/max/mean mock range for the chart
+    return {
+      name: s.name.split(',')[0],
+      min: s.worstMonthDeltaT,
+      mean: s.meanDeltaT,
+      max: s.meanDeltaT + (s.meanDeltaT - s.worstMonthDeltaT) * 0.8,
+      range: [s.worstMonthDeltaT, s.meanDeltaT + (s.meanDeltaT - s.worstMonthDeltaT) * 0.8]
+    };
+  });
+
+  // 3. Why This Site Ranks Here Data
+  const scoreBreakdown = useMemo(() => {
+    if (!focusedSite) return [];
+    
+    // Reverse calculate the 0-1 scores used in sorting
+    const maxDeltaT = Math.max(...SITES.map(s => s.meanDeltaT), 24);
+    const minDeltaT = Math.min(...SITES.map(s => s.meanDeltaT), 18);
+    const minPipe = Math.min(...SITES.map(s => s.pipeLengthMeters), 1500);
+    const maxPipe = Math.max(...SITES.map(s => s.pipeLengthMeters), 5000);
+
+    const thermalScore = Math.max(0, (focusedSite.meanDeltaT - minDeltaT) / (maxDeltaT - minDeltaT));
+    const relScore = focusedSite.reliability / 100;
+    const pipeScore = 1 - Math.max(0, (focusedSite.pipeLengthMeters - minPipe) / (maxPipe - minPipe));
+    
+    let infraScore = 0.5;
+    if (focusedSite.name.includes('Port Blair') || focusedSite.name.includes('Kavaratti')) infraScore = 0.9;
+    if (focusedSite.name.includes('Candidate')) infraScore = 0.2;
+
+    const envScore = focusedSite.environmentalFlag === 'None' ? 1.0 : 0.5;
+
+    return [
+      { factor: 'Thermal', raw: `${focusedSite.meanDeltaT}°C`, weighted: thermalScore * weights.thermal, max: weights.thermal },
+      { factor: 'Reliability', raw: `${focusedSite.reliability}%`, weighted: relScore * weights.reliability, max: weights.reliability },
+      { factor: 'Pipe', raw: `${(focusedSite.pipeLengthMeters/1000).toFixed(1)}km`, weighted: pipeScore * weights.pipe, max: weights.pipe },
+      { factor: 'Infra', raw: `Access`, weighted: infraScore * weights.infra, max: weights.infra },
+      { factor: 'Environment', raw: focusedSite.environmentalFlag === 'None' ? 'Clear' : 'Flagged', weighted: envScore * weights.env, max: weights.env },
+      { factor: 'Overall', raw: `${focusedSite.suitabilityScore}/100`, weighted: focusedSite.suitabilityScore, max: 100 }
+    ];
+  }, [focusedSite, weights]);
+
+  // 4. Radar Chart Data
+  const radarData = useMemo(() => {
+    if (compareList.length < 2 || compareList.length > 3) return [];
+    const axes = ['Thermal', 'Reliability', 'Pipe', 'Infra', 'Env'];
+    
+    return axes.map(axis => {
+      const row = { axis };
+      compareList.forEach((id, i) => {
+        const site = sortedSites.find(s => s.id === id);
+        if (!site) return;
+        
+        let val = 0;
+        if (axis === 'Thermal') val = (site.meanDeltaT - 18) / 6 * 100; // normalize 0-100
+        if (axis === 'Reliability') val = site.reliability;
+        if (axis === 'Pipe') val = Math.max(0, 100 - (site.pipeLengthMeters / 5000 * 100));
+        if (axis === 'Infra') val = site.name.includes('Port') ? 90 : 50;
+        if (axis === 'Env') val = site.environmentalFlag === 'None' ? 100 : 50;
+        
+        row[`site${i}`] = val;
+        row[`name${i}`] = site.name;
+      });
+      return row;
+    });
+  }, [compareList, sortedSites]);
   
   return (
     <div className="flex flex-col gap-6 h-full pb-8">
@@ -493,6 +572,156 @@ export default function FutureSiteRankingTab({ compareList, setCompareList, setA
           </div>
         </div>
       )}
+
+      {/* Comparison Charts */}
+      <div className="grid grid-cols-2 gap-6 mt-2">
+        {/* Chart 1: Scatter */}
+        <SectionCard title="Thermal Resource vs Pipe Feasibility">
+          <div className="h-[250px] w-full relative">
+            {/* Background Quadrant Labels */}
+            <div className="absolute inset-0 pointer-events-none flex flex-col z-0 opacity-20">
+              <div className="flex-1 flex">
+                <div className="flex-1 p-2 text-[10px] text-white font-bold leading-tight">Best prospects:<br/>high ΔT, short pipe</div>
+                <div className="flex-1 p-2 text-right text-[10px] text-white font-bold leading-tight">Strong thermal resource,<br/>expensive pipe</div>
+              </div>
+              <div className="flex-1 flex">
+                <div className="flex-1 p-2 flex items-end text-[10px] text-white font-bold leading-tight">Easy access,<br/>weaker thermal resource</div>
+                <div className="flex-1 p-2 flex justify-end items-end text-right text-[10px] text-white font-bold leading-tight">Low priority</div>
+              </div>
+            </div>
+
+            <ResponsiveContainer width="100%" height="100%">
+              <ScatterChart margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <XAxis type="number" dataKey="pipeLength" name="Pipe Length (km)" domain={[0, 5]} tick={{fill: otecTheme.colors.textSecondary, fontSize: 10}} />
+                <YAxis type="number" dataKey="meanDeltaT" name="Mean ΔT (°C)" domain={[18, 25]} tick={{fill: otecTheme.colors.textSecondary, fontSize: 10}} />
+                <ZAxis type="number" dataKey="reliability" range={[50, 400]} name="Viable Days %" />
+                <RechartsTooltip 
+                  cursor={{strokeDasharray: '3 3'}} 
+                  contentStyle={{ backgroundColor: '#122A3E', border: '1px solid rgba(255,255,255,0.1)', fontSize: '11px' }}
+                  formatter={(value, name) => [name === 'Mean ΔT (°C)' ? `${value}°C` : name === 'Pipe Length (km)' ? `${value}km` : `${value}%`, name]}
+                />
+                <Scatter data={scatterData}>
+                  {scatterData.map((entry, index) => {
+                    // Color scale mapping from score
+                    let fill = otecTheme.colors.statusRed;
+                    if (entry.score > 60) fill = otecTheme.colors.statusAmber;
+                    if (entry.score > 80) fill = otecTheme.colors.statusGreen;
+                    
+                    const isFocused = entry.id === focusedSiteId;
+                    return (
+                      <Cell 
+                        key={`cell-${index}`} 
+                        fill={fill} 
+                        fillOpacity={0.7} 
+                        stroke={isFocused ? 'white' : fill} 
+                        strokeWidth={isFocused ? 2 : 0} 
+                      />
+                    );
+                  })}
+                </Scatter>
+              </ScatterChart>
+            </ResponsiveContainer>
+          </div>
+        </SectionCard>
+
+        {/* Chart 2: Year-Round Reliability Box */}
+        <SectionCard title="Year-Round Reliability (Top 5)">
+          <div className="h-[250px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={top5Sites} layout="vertical" margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="rgba(255,255,255,0.05)" />
+                <XAxis type="number" domain={[15, 26]} tick={{fill: otecTheme.colors.textSecondary, fontSize: 10}} />
+                <YAxis dataKey="name" type="category" width={80} tick={{fill: otecTheme.colors.textSecondary, fontSize: 10}} />
+                <RechartsTooltip 
+                  contentStyle={{ backgroundColor: '#122A3E', border: '1px solid rgba(255,255,255,0.1)', fontSize: '11px' }}
+                  formatter={(value) => [`${value[0].toFixed(1)}°C - ${value[1].toFixed(1)}°C`, 'Range']}
+                />
+                {/* Reference line for 20C threshold */}
+                <ReferenceLine x={20} stroke={otecTheme.colors.statusRed} strokeDasharray="4 4" label={{ position: 'top', value: '20°C Limit', fill: otecTheme.colors.statusRed, fontSize: 9 }} />
+                
+                <Bar dataKey="range" fill={otecTheme.colors.accentTeal} barSize={12} radius={[4, 4, 4, 4]}>
+                  {top5Sites.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.min < 20 ? 'rgba(224, 82, 77, 0.7)' : otecTheme.colors.accentTeal} />
+                  ))}
+                </Bar>
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </SectionCard>
+
+        {/* Chart 3: Why This Site Ranks Here */}
+        <SectionCard title={`Why This Site Ranks Here: ${focusedSite?.name || ''}`}>
+          <div className="h-[250px] w-full relative">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={scoreBreakdown} layout="vertical" margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="rgba(255,255,255,0.05)" />
+                <XAxis type="number" domain={[0, 100]} hide />
+                <YAxis dataKey="factor" type="category" width={80} tick={{fill: otecTheme.colors.textSecondary, fontSize: 10}} />
+                <RechartsTooltip 
+                  cursor={{fill: 'rgba(255,255,255,0.05)'}}
+                  contentStyle={{ backgroundColor: '#122A3E', border: '1px solid rgba(255,255,255,0.1)', fontSize: '11px' }}
+                  formatter={(value, name, props) => [`${value.toFixed(1)} / ${props.payload.max} (${props.payload.raw})`, 'Contribution']}
+                />
+                
+                {/* Background max bar for context */}
+                <Bar dataKey="max" fill="rgba(255,255,255,0.05)" barSize={16} radius={[0, 4, 4, 0]} />
+                
+                {/* Actual score bar overlaid */}
+                <Bar dataKey="weighted" barSize={16} radius={[0, 4, 4, 0]} label={{ position: 'right', fill: 'white', fontSize: 10, formatter: (val) => val.toFixed(1) }}>
+                  {scoreBreakdown.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.factor === 'Overall' ? '#F2F6F8' : otecTheme.colors.accentTeal} />
+                  ))}
+                </Bar>
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </SectionCard>
+
+        {/* Chart 4: Radar Chart (Only visible if 2-3 sites compared) */}
+        {(compareList.length === 2 || compareList.length === 3) ? (
+          <SectionCard title="Multi-Site Feature Comparison">
+            <div className="h-[250px] w-full flex items-center justify-center">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart outerRadius={80} data={radarData}>
+                  <PolarGrid stroke="rgba(255,255,255,0.1)" />
+                  <PolarAngleAxis dataKey="axis" tick={{ fill: otecTheme.colors.textSecondary, fontSize: 10 }} />
+                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+                  <RechartsTooltip contentStyle={{ backgroundColor: '#122A3E', border: '1px solid rgba(255,255,255,0.1)', fontSize: '11px' }} />
+                  
+                  {/* Site 0 */}
+                  {radarData[0]?.site0 !== undefined && (
+                    <Radar name={radarData[0].name0} dataKey="site0" stroke={otecTheme.colors.accentTeal} fill={otecTheme.colors.accentTeal} fillOpacity={0.3} />
+                  )}
+                  {/* Site 1 */}
+                  {radarData[0]?.site1 !== undefined && (
+                    <Radar name={radarData[0].name1} dataKey="site1" stroke={otecTheme.colors.statusGreen} fill={otecTheme.colors.statusGreen} fillOpacity={0.3} />
+                  )}
+                  {/* Site 2 */}
+                  {radarData[0]?.site2 !== undefined && (
+                    <Radar name={radarData[0].name2} dataKey="site2" stroke={otecTheme.colors.statusAmber} fill={otecTheme.colors.statusAmber} fillOpacity={0.3} />
+                  )}
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+            {/* Custom Legend */}
+            <div className="flex justify-center gap-4 mt-2">
+              {compareList.map((id, i) => (
+                <div key={id} className="flex items-center gap-1 text-[10px] text-white">
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: i === 0 ? otecTheme.colors.accentTeal : i === 1 ? otecTheme.colors.statusGreen : otecTheme.colors.statusAmber }}></div>
+                  {sortedSites.find(s => s.id === id)?.name.split(',')[0]}
+                </div>
+              ))}
+            </div>
+          </SectionCard>
+        ) : (
+          <SectionCard title="Multi-Site Feature Comparison">
+            <div className="h-[250px] w-full flex items-center justify-center text-[12px] text-[#9FB3C4]/50 border-2 border-dashed border-white/5 rounded-lg text-center p-4">
+              Select 2 or 3 sites in the table above to unlock the multi-site radar comparison chart.
+            </div>
+          </SectionCard>
+        )}
+      </div>
 
     </div>
   );
