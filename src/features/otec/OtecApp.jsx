@@ -7,13 +7,14 @@ import { DAILY_FORECAST } from './mock-data/daily-forecast';
 import { SITES } from './mock-data/sites';
 import { DEPTH_PROFILE } from './mock-data/depth-profile';
 import { HISTORY_30DAY } from './mock-data/history-30day';
+import SiteExplorerTab from './components/SiteExplorerTab';
 
 export default function OtecApp() {
   const [activeTab, setActiveTab] = useState("Today's Operations");
   const tabs = ["Today's Operations", "Site Explorer", "Future Site Ranking"];
 
   // Mock data for Tab 1
-  const selectedSiteId = 'kavaratti';
+  const [selectedSiteId, setSelectedSiteId] = useState('kavaratti');
   const siteInfo = SITES.find(s => s.id === selectedSiteId);
   const forecast7Days = DAILY_FORECAST[selectedSiteId];
   const todayForecast = forecast7Days[0];
@@ -139,8 +140,8 @@ export default function OtecApp() {
                  {/* Site Dropdown */}
                  <div className="flex items-center gap-2 bg-[#122A3E] border border-white/10 rounded px-3 py-1.5 cursor-pointer hover:bg-white/5 transition-colors">
                    <MapPin size={14} className="text-[#2FB8C9]" />
-                   <select className="bg-transparent border-none text-[13px] font-medium text-white outline-none cursor-pointer">
-                     <option value="kavaratti">Kavaratti, Lakshadweep</option>
+                   <select value={selectedSiteId} onChange={(e) => setSelectedSiteId(e.target.value)} className="bg-transparent border-none text-[13px] font-medium text-white outline-none cursor-pointer">
+                     {SITES.map(s => <option key={s.id} value={s.id}>{s.name}, {s.region}</option>)}
                    </select>
                  </div>
                  
@@ -559,10 +560,7 @@ export default function OtecApp() {
         )}
         
         {activeTab === "Site Explorer" && (
-          <div>
-             <h2 style={{ fontSize: '20px', fontWeight: 600, marginBottom: '20px' }}>Site Explorer</h2>
-             {/* Shell placeholder for tab 2 */}
-          </div>
+          <SiteExplorerTab selectedSiteId={selectedSiteId} setSelectedSiteId={setSelectedSiteId} />
         )}
         
         {activeTab === "Future Site Ranking" && (
