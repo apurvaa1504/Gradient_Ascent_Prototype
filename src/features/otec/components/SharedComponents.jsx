@@ -96,7 +96,7 @@ export function ThresholdBar({ value, min, max, target, thresholds = [] }) {
   );
 }
 
-export function KpiCard({ icon: Icon, title, value, unit, statusLabel, statusType, description, barProps }) {
+export function KpiCard({ icon: Icon, title, value, unit, statusLabel, statusType, description, barProps, children }) {
   return (
     <div style={{
       backgroundColor: otecTheme.colors.panel,
@@ -105,7 +105,8 @@ export function KpiCard({ icon: Icon, title, value, unit, statusLabel, statusTyp
       padding: '16px',
       display: 'flex',
       flexDirection: 'column',
-      gap: '8px'
+      gap: '8px',
+      height: '100%'
     }}>
       <div className="flex justify-between items-start">
         <div className="flex items-center gap-2 text-[13px] font-medium" style={{ color: otecTheme.colors.textSecondary }}>
@@ -127,6 +128,12 @@ export function KpiCard({ icon: Icon, title, value, unit, statusLabel, statusTyp
       {description && (
         <div className="text-[12px] mt-1" style={{ color: otecTheme.colors.textSecondary }}>
           {description}
+        </div>
+      )}
+      
+      {children && (
+        <div className="mt-2 flex-1 flex flex-col justify-end">
+          {children}
         </div>
       )}
     </div>
