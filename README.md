@@ -1,566 +1,748 @@
-# OceanEmbed: High-Resolution 3D Subsurface Ocean Temperature Reconstruction
-### Smart India Hackathon 2026 (Problem Statement: PS-26066)
-**Team Gradient Ascent**
+# OceanEmbed
+
+OceanEmbed is a full-stack ocean intelligence prototype for the North Indian Ocean. It combines a FastAPI-based inference backend, a React + Leaflet GIS frontend, and a physics-aware deep learning workflow to reconstruct subsurface ocean temperature structure from multi-satellite surface observations.
+
+The application is designed to solve a practical operational problem: surface satellites can see only the skin of the ocean, while the subsurface thermocline and deep thermal structure are often missing. OceanEmbed maps a 16-day sequence of atmospheric and ocean-surface variables into a 15-layer temperature reconstruction spanning 0 m to 1000 m over the North Indian Ocean domain.
+
+The product currently includes three visible application experiences:
+
+1. Main Ocean Map Dashboard
+2. TCHP Intelligence Dashboard
+3. OTEC Intelligence Platform
+
+Each page is styled as a dark monitoring dashboard with marine scientific UI patterns, layered map overlays, glowing telemetry elements, and color-coded decision support metrics.
 
 ---
 
-## 1. Executive Summary & Problem Context
+## 1. Project Overview and Scope
 
-In operational oceanography and defense applications (e.g., naval acoustic sonar propagation, submarine concealment, and cyclone intensification modeling), knowing the vertical thermodynamic structure of the ocean is critical. However, measuring the subsurface ocean directly requires in-situ instruments such as **ARGO profiling floats**, **shipboard CTD casts**, and **moored buoys**. These instruments are:
-- **Spatially sparse**: Average spacing between ARGO floats is ~300 km (~3° resolution).
-- **Temporally latent**: Typical float surfacing cycles are 10 days; global numerical reanalyses (e.g., Copernicus GLORYS12) operate on a multi-day to multi-week delayed-time release.
-- **Cost-prohibitive & physically fragile**: Moorings and autonomous floats face bio-fouling, sensor drift, and battery exhaustion.
+### Domain and objective
+- Geographic domain: 5°N to 30°N and 45°E to 105°E
+- Grid resolution: 0.25° x 0.25°
+- Temporal window used by the backend logic: 16-day rolling window
+- Output depths: 0, 10, 20, 30, 50, 75, 100, 150, 200, 300, 400, 500, 700, 850, 1000 m
+- Main aim: subsurface ocean temperature reconstruction, acoustic propagation awareness, thermal resource analysis, and decision support for marine energy and cyclone-risk interpretation
 
-Conversely, satellite remote sensing offers synoptic, daily, high-resolution observations—but **only for the 2D ocean surface skin** (Sea Surface Temperature, Sea Surface Salinity, Sea Surface Height, Surface Currents, and Surface Winds).
+### Data inputs modeled by the app
+- SST: Sea surface temperature
+- SSS: Sea surface salinity
+- SSH: Sea surface height anomaly
+- U-current and V-current: surface currents
+- U-wind and V-wind: surface wind vectors
 
-**OceanEmbed** bridges this fundamental observation gap. It uses a tailored deep neural architecture—**`UNetOcean3D`**—to map a **rolling 16-day spatiotemporal sequence of 5 multi-satellite surface parameters (7 distinct physical channels)** directly into a **15-depth vertical potential temperature profile ($0\text{ m}$ to $1000\text{ m}$)** across the entire **North Indian Ocean (NIO)** basin ($5^\circ\text{N} - 30^\circ\text{N}$, $45^\circ\text{E} - 105^\circ\text{E}$) at **$0.25^\circ \times 0.25^\circ$ spatial resolution** in under **150 milliseconds**.
-
-```
-                   ┌────────────────────────────────────────────────────────┐
-                   │       MULTI-SATELLITE SURFACE OBSERVATIONS (L3/L4)     │
-                   │  SST (OSTIA) · SSS (SMAP) · SSH (DUACS) · U/V Currents │
-                   │         (OSCAR) · U/V Winds (CMEMS Blended)            │
-                   └───────────────────────────┬────────────────────────────┘
-                                               │ (T=16 days, C=7 channels, 0.25° grid)
-                                               ▼
-                   ┌────────────────────────────────────────────────────────┐
-                   │                     OceanEmbed ML                      │
-                   │       3D Spatiotemporal Encoder → Time Collapse        │
-                   │           → 2D CBAM Attention Decoder                  │
-                   └───────────────────────────┬────────────────────────────┘
-                                               │ Real-time Inference (<150 ms)
-                                               ▼
-                   ┌────────────────────────────────────────────────────────┐
-                   │              SUBSURFACE OCEAN THERMODYNAMICS           │
-                   │   15 Vertical Depths (0 to 1000m) · Thermocline        │
-                   │ Sonic Layer Depth (SLD) · Cyclone Heat Potential (TCHP)│
-                   └────────────────────────────────────────────────────────┘
-```
+### Functional goals
+- Inspect any ocean point in the study region
+- Observe reconstructed temperature profiles at multiple depths
+- Evaluate thermal gradient, thermocline changes, sound speed, TCHP, and marine heatwave context
+- Show site viability for OTEC energy generation
+- Show tactical ocean heat diagnostics using TCHP-style decision cards
 
 ---
 
-## 2. End-to-End System Architecture
+## 2. System Architecture
 
-The project consists of three tightly coupled tiers:
-1. **Frontend GIS Application**: Copernicus MyOcean-inspired single-page web application built with React 19, Leaflet, and custom HTML5 rendering pipelines for thermal fields, vector masks, and probe telemetry.
-2. **Backend Microservice**: High-throughput FastAPI asynchronous inference server that orchestrates satellite data ingestion, normalization, model inference, and physical metric computation.
-3. **Data & Machine Learning Pipeline**: The `UNetOcean3D` PyTorch model, geospatial regridding utilities, and live satellite connectors for Copernicus Marine Service (CMEMS) and NASA Earthdata (PO.DAAC).
+### Frontend stack
+- React 19
+- Vite
+- Leaflet + react-leaflet
+- Tailwind CSS
+- d3-geo and topojson-client for coastline processing
+- HTML5 Canvas for thermal rendering and grid overlays
+- Lucide React icons
 
-### High-Level Architecture Diagram
+### Backend stack
+- FastAPI + Uvicorn
+- Python 3.10+
+- PyTorch
+- NumPy and SciPy
+- xarray and netCDF4
+- copernicusmarine
+- earthaccess
 
-```mermaid
-flowchart TD
-    subgraph SATELLITE_SOURCES["External Earth Observation Feeds"]
-        CMEMS_SST["CMEMS OSTIA L4 NRT<br/>(analysed_sst, °C)"]
-        SMAP_SSS["NASA PO.DAAC SMAP L3<br/>(sss_smap, PSU)"]
-        CMEMS_SSH["CMEMS DUACS SLA L4 NRT<br/>(sla, meters)"]
-        OSCAR_CUR["NASA PO.DAAC OSCAR v2.0 NRT<br/>(u, v currents, m/s)"]
-        CMEMS_WIND["CMEMS Blended Wind L4 NRT<br/>(u, v winds, m/s)"]
-    end
+### ML architecture concept
+The inference system implements a UNet-style 3D-to-2D spatiotemporal encoder-decoder pattern:
 
-    subgraph BACKEND["FastAPI Backend (backend/ - Port 8000)"]
-        MAIN["main.py<br/>(FastAPI, Lifespan, CORS, Endpoints)"]
-        INF["inference.py<br/>(Pipeline Orchestrator, T(z) Extraction)"]
-        REGRID["regridder.py<br/>(RegularGridInterpolator 0.25° NIO)"]
-        MLOAD["model_loader.py<br/>(Singleton Loader, Weights & Stats)"]
-        MDEF["model_def.py<br/>(UNetOcean3D PyTorch Architecture)"]
-        
-        subgraph INGESTION["sources/ Package"]
-            S_INIT["__init__.py<br/>(fetch_all_channels via asyncio.gather)"]
-            S_DATE["date_utils.py<br/>(16-day Rolling Window & Latency Offsets)"]
-            S_COMMON["cmems_common.py<br/>(Catalog Search & Bounded Tolerance)"]
-            S_SST["cmems_sst.py"]
-            S_SSS["smap_sss.py"]
-            S_SSH["cmems_ssh.py"]
-            S_CUR["oscar_currents.py"]
-            S_WIND["cmems_winds.py"]
-        end
-    end
+- Input tensor: 7 channels x 16 days x spatial grid
+- Channels include SST, SSS, SSH, U/V currents, and U/V winds
+- Spatial domain is the North Indian Ocean at 0.25° resolution
+- Output is a 15-depth temperature field for the same geospatial grid
+- Model logic uses 3D encoder blocks, temporal collapse, and 2D decoder reconstruction
+- Attention logic uses a CBAM-style mechanism for channel and spatial focus
 
-    subgraph FRONTEND["Frontend Web Application (src/ - Vite / React 19)"]
-        CLIENT["apiClient.js<br/>(fetchInferencePrediction)"]
-        APP["App.jsx<br/>(State Coordinator & Layout)"]
-        HEATMAP["OceanThermalHeatmap<br/>(Canvas Raster 600x250)"]
-        GRID_OV["Grid025Overlay<br/>(Canvas 0.25° Mesh Reticle)"]
-        LAND["LandVectorMask<br/>(GeoJSON via d3-geo)"]
-        PROBE["OceanEmbedProbeCard<br/>(Telemetry, Physics, SLD, TCHP)"]
-        SIM["simulation.js<br/>(Mackenzie 1981 Acoustics, MHW, TCHP)"]
-        GEODATA["geoData.js & landmask.js<br/>(Point-in-Polygon & TopoJSON)"]
-    end
+### Data and model pipeline
+- Multi-source data ingestion from CMEMS and NASA Earthdata sources
+- Regridding to a master 0.25° North Indian Ocean grid
+- Normalization and denormalization using saved model statistics
+- Inference through FastAPI endpoints
+- Frontend query sends coordinates and returns subsurface temperature profile
 
-    %% External Data Connections
-    CMEMS_SST --> S_SST
-    SMAP_SSS --> S_SSS
-    CMEMS_SSH --> S_SSH
-    OSCAR_CUR --> S_CUR
-    CMEMS_WIND --> S_WIND
-
-    %% Ingestion Assembly
-    S_SST & S_SSS & S_SSH & S_CUR & S_WIND --> S_INIT
-    S_COMMON -.-> S_SST & S_SSH & S_WIND
-    S_DATE -.-> S_INIT & S_SST & S_SSS & S_SSH & S_CUR & S_WIND
-    S_INIT --> INF
-
-    %% Regridding and Model
-    REGRID --> S_SST & S_SSS & S_SSH & S_CUR & S_WIND
-    REGRID --> INF
-    MLOAD --> INF
-    MDEF --> MLOAD
-    INF --> MAIN
-
-    %% API to Client
-    MAIN <== HTTP POST /api/v1/predict ==> CLIENT
-    CLIENT --> APP
-
-    %% Frontend Internal Wiring
-    APP --> HEATMAP & GRID_OV & LAND & PROBE
-    PROBE --> SIM
-    APP --> GEODATA
-    GEODATA --> LAND
-```
+### API endpoints
+- GET /api/v1/health
+- GET /api/v1/data-status
+- POST /api/v1/predict
+- POST /api/v1/inspect-sources
 
 ---
 
-## 3. Repository Structure & File Directory Map
+## 3. Main Application Page: Ocean Map Dashboard
 
-```
+This is the primary interactive page mapped at the root route: /.
+
+### Purpose
+This page acts like a Copernicus-style scientific ocean dashboard. It is a map-first environment where the user can click any ocean cell, inspect its reconstructed thermal profile, compare model output to climatological reference, and evaluate subsurface conditions.
+
+### Layout and visible UI elements
+
+#### Top header
+At the top of the map, the dashboard shows:
+- OceanEmbed logo and title
+- scientific subtitle: “AI Subsurface Ocean 3D Reconstruction”
+- domain label: “North Indian Ocean (5°N–30°N, 45°E–105°E)”
+- depth indicator: “15 Depths (0–1000m)”
+- event label: “SIH 2026 · PS-26066”
+- OTEC Intelligence Platform button
+- TCHP Intelligence button
+
+#### Left panel: layer selector card
+A floating card in the upper-left side displays:
+- title: “Sea water potential temperature (thetao)”
+- depth metadata such as “Surface (0m)” or “100m depth”
+- year and daily grid text
+- a gradient legend bar with magma/inferno colors from dark violet to golden yellow
+- forecast lead mode buttons:
+  - Now
+  - +1d
+  - +2d
+  - +3d
+  - +7d
+  - +14d
+- grid opacity slider with percentage value
+
+#### Map background and overlays
+The map contains these layers in order:
+- Dark ArcGIS-style world basemap
+- thermal ocean heatmap canvas at z-level 10
+- land mask at z-level 12
+- 0.25° grid overlay at z-level 15
+- click probe marker at z-level 20
+- floating UI overlays above the map
+
+#### Right utility toolbar
+A vertical floating toolbar on the right side includes:
+- point probe tool
+- show/hide 0.25° grid toggle
+- download / data export option
+- tooltips appear on hover for each action
+
+#### Right depth selector
+A vertical depth selector panel shows multiple ocean depths:
+- 0 m (SST)
+- 5 m
+- 10 m
+- 20 m
+- 30 m
+- 50 m
+- 75 m
+- 100 m
+- 125 m
+- 150 m
+- 200 m
+- 300 m
+- 500 m
+- 700 m
+- 1000 m
+
+This selector updates the currently visualized depth and changes the thermal canvas accordingly.
+
+#### Coordinate and HUD panel
+A bottom-left HUD displays:
+- selected probe coordinates in lat/lon
+- cell index for the 0.25° grid if inside domain
+- hover cell coordinates if user moves cursor over water
+- region label: Arabian Sea or Bay of Bengal
+- current temperature reading in °C
+
+### Map behavior
+- Clicking anywhere in open water selects a probe point
+- The app snaps coordinates to the grid if enabled
+- Hovering over the map updates the hovered cell and cell-level metadata
+- A glowing cyan marker shows the active selected point
+- If the selected point falls on land, the app shows a “No data” state instead of ocean metrics
+
+### Thermal map styling
+The heatmap uses a Copernicus-like magma palette:
+
+- #0f0a28 / dark violet
+- #301258
+- #5c166e
+- #912664
+- #c84146
+- #f27332
+- #fdb955
+- #fefab4
+
+This palette is rendered on a canvas to display cold deep water in dark blue/violet and warm surface water in amber/yellow tones.
+
+### Probe card details
+When a valid ocean cell is clicked, a floating inspection card appears next to the clicked coordinate. This probe card contains these sections:
+
+#### Header
+- coordinate string like “70.000°E, 15.000°N”
+- region badge: Bay of Bengal or Arabian Sea
+- close button
+
+#### Top telemetry row
+- Reconstructed Potential Temp in °C
+- Marine Heatwave status badge
+- optional +Nday lead label
+
+#### Tabs
+The card has four main tabs:
+
+1. 15-Depth Profile
+   - vertical temperature profile T(z)
+   - GLORYS12 dashed reference curve
+   - thermocline highlight band
+   - depth axis and temperature axis
+   - rapid ΔT annotation
+   - average / minimum / maximum summary values
+   - TCHP card below it
+
+2. Sonic / SLD
+   - Sonic Layer Depth (SLD) value in meters
+   - sound speed profile C(z)
+   - Mackenzie equation logic referenced in the code
+   - explanation that SLD is critical for naval sonar propagation and submarine shadow zones
+
+3. ARGO Benchmark
+   - model RMSE in °C
+   - R² value
+   - float ID reference
+   - latency advantage concept
+   - grid density comparison
+
+4. 5 Satellite Inputs
+   - SST
+   - SSS
+   - SSH anomaly
+   - current speed
+   - wind speed and wind direction
+
+### Additional standout values in the probe card
+- Marine heatwave classification text
+- TCHP value in kJ/cm²
+- “High Cyclone Intensity Risk” or “Low / Moderate Risk” label
+- thermal profile summary data
+
+### Land behavior
+If the user clicks a land coordinate:
+- the probe card does not show a temperature profile
+- it renders a land/no-data visual panel with “No data” placeholders
+- the interface preserves the scientific dashboard feel without displaying false ocean values
+
+---
+
+## 4. TCHP Intelligence Page
+
+This page is accessible from the main app via the “TCHP Intelligence” button and is also used for the /tchp route.
+
+### Purpose
+This page demonstrates Tropical Cyclone Heat Potential (TCHP) analysis across the North Indian Ocean. It presents a determination-support interface rather than a deterministic storm forecast.
+
+### Header and layout
+The page includes:
+- brand lockup: “OCEANEMBED / SUBSURFACE INTELLIGENCE”
+- region breadcrumb: OceanEmbed / Ocean Heat / TCHP Intelligence
+- region selector dropdown
+- mode switch: Forecaster vs Expert
+- back button to return to the ocean map
+
+### Main controls and page states
+The TCHP page includes:
+- region selection: Arabian Sea, Bay of Bengal, or full North Indian Ocean
+- layer tabs:
+  - TCHP
+  - D26 depth
+  - SST anomaly
+  - 100m anomaly
+  - Confidence
+  - Currents
+  - Cyclone corridor
+- selected location point with profile inspection
+- notification toast for user actions
+
+### Map visualization
+The map panel is a stylized SVG-based ocean heat map with:
+- magenta/cyan/amber ocean surface background
+- interpolation grid pattern
+- approximate coastline silhouettes
+- ocean corridor path
+- markers for buoy and sampled locations
+- hover tooltip showing:
+  - location
+  - TCHP in kJ/cm²
+  - D26 depth in meters
+  - confidence percentage
+  - risk category
+
+### Profile chart
+The profile card contains a 15-depth plot showing:
+- temperature vs depth
+- climatology dashed line
+- anomaly and thermocline markers
+- D26, D20, thermocline, and temperature-defined layer overlays
+- metric strip with TCHP, D26, D20, and confidence summary
+
+### Trend chart
+A 14-day TCHP trend chart shows the progression of heat support over time, including:
+- polyline trend
+- last-value highlight
+- baseline percentage message
+- textual interpretation note
+
+### Expert data panel
+This includes:
+- table of depth observations with temperature, uncertainty, climatology, and delta difference
+- copy CSV button for exporting the profile as CSV
+- confidence breakdown by SST, SSS, SSH, current, wind, historical support, regional support
+- surface signals used by OceanEmbed
+
+### Corridor analysis panel
+This panel simulates a cyclone path and shows:
+- corridor point list on the left with labels
+- TCHP, D26, SST, and confidence values for each point
+- route summary panel for the selected corridor segment
+- prototype-only disclaimer
+- “Generate corridor brief” button
+
+### Methodology card
+The page includes a collapsible section titled “Methodology and interpretation” with:
+- what TCHP means
+- why it matters for cyclone support
+- what it does not mean
+- a simple process flow
+
+### Design style on the TCHP page
+- dark marine background
+- amber, cyan, and white accent palette
+- prototype stamp and caution belt
+- glassy cards, dashboards, and tinted panels
+- alert-style integrated support metric bar
+
+---
+
+## 5. OTEC Intelligence Platform
+
+This is the site-level energy and freshwater analysis page mapped at /otec.
+
+### High-level purpose
+The OTEC page evaluates whether a location is operationally viable for ocean thermal energy conversion, based on the temperature difference between warm surface water and cold deep water. It focuses on:
+- thermal gradient ΔT
+- gross power output
+- freshwater production potential
+- plant viability decision logic
+- site comparison ranking
+
+### Main navigation tabs
+The page has three primary tabs:
+
+1. Today’s Operations
+2. Site Explorer
+3. Future Site Ranking
+
+### Page 1: Today’s Operations
+
+#### Top control row
+This section contains:
+- site drop-down selector
+- date display
+- forecast horizon selector
+- model confidence status badge
+- Download Daily Advisory button
+
+#### KPI cards
+The dashboard shows four KPI cards:
+
+1. Thermal Gradient (ΔT)
+   - shows the temperature difference between surface and cold-water intake depth
+   - status label: VIABLE, MARGINAL, or ALERT
+   - threshold bar for 20°C viability cutoff
+   - descriptive text about whether the thermal resource is strong enough
+
+2. Estimated Gross Power Output
+   - shows power in kW
+   - expected range text
+   - small sparkline chart of the next 7 days
+
+3. Estimated Freshwater Output
+   - shows lakh liters/day or equivalent figure
+   - expected range and comparison against previous day
+   - tank fill-style indicator
+
+4. Site ΔT Ranking
+   - ranking of the current site among candidate sites
+   - horizontal ranking marker strip
+   - button to jump to candidate ranking
+
+#### Decision advisory banner
+A large decision banner explains whether the site is:
+- strong
+- marginal
+- weak
+and states whether normal OTEC operation, blended backup, or backup generation is recommended.
+
+#### Ocean Fuel Profile chart
+This is a vertical chart showing temperature as depth increases.
+- X-axis: temperature in °C
+- Y-axis: depth in meters
+- warm surface water at 0 m
+- cold-water intake at selected deep intake depth
+- threshold reference line at 20°C
+- annotated warm intake and cold intake points
+- rapid gradient highlight and the available ΔT value
+
+#### 7-Day Ocean Energy Forecast panel
+This chart uses a composed line/area chart showing:
+- ΔT over the next 7 days on the left Y-axis
+- gross power over the next 7 days on the right Y-axis
+- uncertainty bands for min/max values
+- reference line at the 20°C viability threshold
+- forecast callouts for monsoon cooling and high-confidence windows
+- compact daily table with date, ΔT, gross power, freshwater, and operating decision
+
+#### Power & Water History chart
+This chart shows historical 30-day trend data for:
+- freshwater output (bars)
+- power output (line)
+- target demand reference line
+
+#### Thermal Risk Events panel
+This panel shows timeline markers for:
+- cold eddy event
+- monsoon wind mixing event
+- textual explanation of operational risk windows
+
+#### Model Confidence panel
+This shows the current confidence confidence in the model forecast across:
+- 0–30 m surface layer
+- 500–1000 m deep layer
+with quality bars and ±°C error ranges
+
+---
+
+### Page 2: Site Explorer
+
+This tab is a geospatial OTEC site analysis screen with map and filter controls.
+
+#### Controls in the header row
+- region selector: All / Lakshadweep / Andaman
+- site selector dropdown
+- period selector: Last 1 Year / 5-Year Climatology / Full Record
+- intake depth selector: 500 m / 700 m / 1000 m
+- plant capacity selector: 1 MW / 5 MW / 10 MW / 50 MW
+- toggles for:
+  - show bathymetry
+  - show protected areas
+  - show infrastructure
+
+#### Map layer controls
+This panel allows switching between:
+- thermal gradient ΔT continuous map
+- OTEC viability categorical map
+- reliability percentage map
+- minimum viable depth map
+
+#### Geospatial map features
+- candidate site pins on a Leaflet map
+- selected site highlight
+- bathymetry contour lines
+- protected area overlays
+- shipping route or infrastructure overlays
+- comparison state through selected site markers
+
+#### Site ranking and analytics in the explorer tab
+The page includes a dynamic ranking calculation using thermal resource, reliability, pipe feasibility, infrastructure, and environmental constraints.
+
+It contains charts and panels such as:
+- monthly delta T by month
+- tradeoff chart by intake depth
+- seabed bathymetry profile and pipe route proxy
+- site fit and viability metrics
+
+#### Main chart elements in the site explorer page
+- monthly thermal behavior chart for the selected site across Jan–Dec
+- depth vs delta T / power / cost tradeoff chart
+- bathymetry profile along a conceptual route
+- candidate site summary data used for operational interpretation
+
+---
+
+### Page 3: Future Site Ranking
+
+This tab is a strategic ranking dashboard for selecting the most promising OTEC sites.
+
+#### Filter panel
+The ranking page provides filters for:
+- region
+- minimum thermal gradient threshold
+- minimum reliability threshold
+- maximum pipe route length
+- planned capacity
+- exclusion of environmentally constrained zones
+
+#### Decision weight adjustment panel
+The user can adjust the relative weighting of:
+- thermal resource quality
+- reliability / persistence
+- pipe feasibility
+- infrastructure / demand access
+- environmental compatibility
+
+The sliders auto-normalize to a total of 100%.
+
+#### Summary metrics cards
+The page shows:
+- total candidate sites analyzed
+- number of high-potential sites
+- best overall candidate site
+- best thermal resource site
+- lowest pipe-cost proxy site
+
+#### Ranking table
+The table includes these columns:
+- compare checkbox
+- rank
+- site name
+- suitability score
+- mean ΔT
+- worst-month ΔT
+- viable days %
+- recommended intake depth
+- estimated pipe length
+- estimated gross power
+- environmental flag
+
+The table supports sorting by each column.
+
+#### Comparison charts
+The ranking page includes multiple visual graphs:
+
+1. Thermal Resource vs Pipe Feasibility Scatter Plot
+   - X-axis: pipe length (km)
+   - Y-axis: mean ΔT (°C)
+   - bubble size/proxy indicates reliability
+   - color indicates score tier
+   - useful for identifying high-potential low-pipe sites
+
+2. Year-Round Reliability Chart
+   - top five sites ranked on thermally viable range
+   - reference line at 20°C threshold
+   - range-style bars showing min/max or seasonal spread
+
+3. Why This Site Ranks Here
+   - bar chart showing weighted contribution of thermal, reliability, pipe, infrastructure, environment, and overall score
+
+4. Multi-Site Radar Comparison Chart
+   - appears when 2 or 3 sites are selected in the compare table
+   - compares thermal, reliability, pipe, infrastructure, and environmental performance side-by-side
+
+#### Export and briefing features
+- CSV export button for the filtered ranking table
+- site briefing modal for a selected site
+- environment summary for the chosen location
+
+---
+
+## 6. Design Language and Color System
+
+### Core visual identity
+The UI uses a dark marine-control-room aesthetic with scientific emphasis and high contrast for operational clarity.
+
+### Main palette
+- background: #02040a
+- dark panels: #0c1017, #0B1B2B, #122A3E
+- accent cyan: #2FB8C9 and #38bdf8
+- highlight fuchsia: #f472b6
+- warning amber: #E0A82E and #fbbf24
+- danger red: #E0524D and #f43f5e
+- success green: #3FBF7F
+- text primary: #F2F6F8
+- text secondary: #9FB3C4
+
+### Thermal color scale
+The thermal heatmap uses a magma/inferno palette that transitions from cold to hot:
+
+#0f0a28 -> #301258 -> #5c166e -> #912664 -> #c84146 -> #f27332 -> #fdb955 -> #fefab4
+
+This is applied to the main sea-temperature map so:
+- cooler water = dark violet / blue tones
+- warmer water = orange / yellow tones
+
+### OTEC color system
+The OTEC dashboard uses a more operational-control palette:
+- background: #0B1B2B
+- panel workspace: #122A3E
+- accent teal: #2FB8C9
+- status green: #3FBF7F
+- status amber: #E0A82E
+- status red: #E0524D
+- text primary: #F2F6F8
+- text secondary: #9FB3C4
+
+### Design characteristics
+- glassmorphism for overlays and floating panels
+- crisp monospaced numbers for metrics and coordinates
+- strong line separators and dark surfaces for readability
+- cyan for live intelligence / active anomalies
+- amber for heat and operational warnings
+- red for risk and critical alert states
+- green for viable / good operating conditions
+
+---
+
+## 7. Repository Structure
+
+```text
 Gradient_Ascent_Prototype/
 ├── backend/
-│   ├── .env                       # Environment configuration (CMEMS & Earthdata credentials)
-│   ├── requirements.txt           # Python dependencies (PyTorch, FastAPI, xarray, copernicusmarine, earthaccess)
-│   ├── main.py                    # FastAPI entrypoint, HTTP routing, coordinate validators, and CORS
-│   ├── model_def.py               # UNetOcean3D PyTorch neural architecture definition with CBAM
-│   ├── model_loader.py            # Singleton model weights & normalization tensor loader
-│   ├── inference.py               # End-to-end inference flow: windowing, tensor assembly, model pass, denorm
-│   ├── regridder.py               # Geospatial projection onto the 0.25° NIO master grid
-│   ├── data_download.py           # CLI batch downloader for Copernicus & NASA PO.DAAC training datasets
-│   └── sources/                   # Satellite data acquisition engine
-│       ├── __init__.py            # fetch_all_channels() concurrent pipeline runner
-│       ├── date_utils.py          # Latency-aware rolling date-window constructors
-│       ├── cmems_common.py        # Resilient CMEMS authentication, catalog search, and bounded time matching
-│       ├── cmems_sst.py           # Channel 0: OSTIA L4 NRT Sea Surface Temperature fetcher
-│       ├── smap_sss.py            # Channel 1: NASA RSS SMAP L3 Sea Surface Salinity fetcher
-│       ├── cmems_ssh.py           # Channel 2: CMEMS DUACS SLA Sea Surface Height Anomaly fetcher
-│       ├── oscar_currents.py      # Channels 3 & 4: NASA OSCAR v2.0 U/V surface currents fetcher
-│       └── cmems_winds.py         # Channels 5 & 6: CMEMS L4 NRT blended U/V surface winds fetcher
+│   ├── .env
+│   ├── requirements.txt
+│   ├── main.py
+│   ├── inference.py
+│   ├── model_def.py
+│   ├── model_loader.py
+│   ├── regridder.py
+│   ├── data_download.py
+│   └── sources/
+│       ├── __init__.py
+│       ├── cmems_common.py
+│       ├── cmems_sst.py
+│       ├── smap_sss.py
+│       ├── cmems_ssh.py
+│       ├── oscar_currents.py
+│       ├── cmems_winds.py
+│       └── date_utils.py
 ├── model/
-│   └── checkpoints/               # Directory for model checkpoint weights (*.pt)
-│       └── best_model_0.6787_epoch16.pt
+│   └── checkpoints/
 ├── public/
-│   ├── favicon.svg                # Application browser icon
-│   └── icons.svg                  # SVG symbol sprite catalog
+│   ├── favicon.svg
+│   └── icons.svg
 ├── src/
-│   ├── assets/                    # Static image assets and logos
-│   ├── apiClient.js               # Frontend fetch wrapper for the FastAPI backend
-│   ├── App.jsx                    # Primary UI component: Leaflet map, Canvas overlays, Copernicus probe card
-│   ├── App.css                    # Supplementary UI styling
-│   ├── index.css                  # Tailwind CSS imports, Leaflet dark-theme overrides, fonts
-│   ├── main.jsx                   # React root entry point
-│   ├── simulation.js              # Physical acoustics formulas (Mackenzie 1981), SLD, TCHP, fallback simulator
-│   ├── geoData.js                 # World Atlas TopoJSON processor and ray-casting land checker
-│   └── landmask.js                # Hand-curated North Indian Ocean boundary polygons for precise masking
-├── index.html                     # HTML5 shell with Google Font typography (Outfit & JetBrains Mono)
-├── package.json                   # NPM dependency manifest (React 19, Leaflet, Tailwind v4, D3-Geo)
-├── vite.config.js                 # Vite bundling configuration with Tailwind CSS and React plugins
-└── README.md                      # Comprehensive Technical Architectural Documentation
+│   ├── App.jsx
+│   ├── App.css
+│   ├── apiClient.js
+│   ├── geoData.js
+│   ├── index.css
+│   ├── main.jsx
+│   ├── simulation.js
+│   ├── TchpPage.jsx
+│   ├── tchp.css
+│   ├── tchpInteractions.css
+│   ├── tchpMockData.js
+│   ├── tchpPhysics.js
+│   ├── landmask.js
+│   └── features/
+│       └── otec/
+│           ├── OtecApp.jsx
+│           ├── otec-theme.ts
+│           └── components/
+│               ├── SiteExplorerTab.jsx
+│               ├── FutureSiteRankingTab.jsx
+│               └── SharedComponents.jsx
+├── index.html
+├── package.json
+├── vite.config.js
+├── README.md
+├── catchErrors.js
+└── .gitignore
 ```
 
 ---
 
-## 4. Deep Dive: Machine Learning Architecture (`UNetOcean3D`)
+## 8. Frontend Page Summary
 
-The subsurface ocean is governed by non-linear physical dynamics (Ekman transport, Rossby and Kelvin wave propagation, and geostrophic balance). Atmospheric forcing from winds, surface cooling/heating (SST), evaporation/precipitation (SSS), and sea height variations (SSH) influence internal thermocline displacement over days and weeks.
+### Main ocean map page features
+- dark ocean dashboard UI
+- interactive geospatial map
+- depth-aware thermal overlays
+- target probe selector
+- 0.25° grid overlay and hover labels
+- real-time model inference integration to the backend
+- no-data land state
+- thermocline and TCHP interpretation panels
+- ML-driven subsurface temperature profile display
 
-To capture these delayed temporal lag effects, the model takes a **spatiotemporal 4D tensor volume** as input:
+### TCHP page features
+- map-based TCHP overview and selected location overlay
+- selected profile comparison plot
+- 14-day TCHP trend chart
+- confidence and data provenance cards
+- synthetic corridor analysis and brief export
+- expert and forecaster design variants
 
-$$\mathbf{X} \in \mathbb{R}^{B \times C \times T \times H \times W}$$
+### OTEC page features
+- operational OTEC viability recommendations
+- deep-water ΔT diagnostics
+- 7-day power and freshwater forecast
+- site ranking and filtering
+- geospatial candidate analysis
+- weighted decision-scoring ranking engine
+- CSV export and site briefing modal
 
-Where:
-- $B$: Batch size (typically 1 for real-time inference)
-- $C = 7$: Input physical channels
-- $T = 16$: Daily temporal sequence (past 16 consecutive calendar days)
-- $H = 101$: Latitude dimension ($5.00^\circ\text{N} \to 30.00^\circ\text{N}$ at $0.25^\circ$ step)
-- $W = 241$: Longitude dimension ($45.00^\circ\text{E} \to 105.00^\circ\text{E}$ at $0.25^\circ$ step)
+---
 
-The target output is a **2D spatial multi-channel tensor**:
+## 9. Setup Instructions
 
-$$\mathbf{Y} \in \mathbb{R}^{B \times D \times H \times W}$$
-
-Where $D = 15$ channels represent the vertical depth levels:
-$$\text{Depths (m)} = [0, 10, 20, 30, 50, 75, 100, 150, 200, 300, 400, 500, 700, 850, 1000]$$
-
-```
-Input Tensor: (B, 7, 16, 101, 241)
-  │
-  ├─► [3D Encoder Stage 1] Conv3D(7->24)   --> (B, 24, 16, 101, 241) ───┐ [Skip 1: Time Collapse]
-  │        MaxPool3d(2, 2)                                              │
-  ├─► [3D Encoder Stage 2] Conv3D(24->48)  --> (B, 48, 8, 51, 121)   ───┼──► [Skip 2: Time Collapse]
-  │        MaxPool3d(2, 2)                                              │
-  ├─► [3D Encoder Stage 3] Conv3D(48->96)  --> (B, 96, 4, 26, 61)    ───┼──► [Skip 3: Time Collapse]
-  │        MaxPool3d(2, 2)                                              │
-  ├─► [3D Encoder Stage 4] Conv3D(96->192) --> (B, 192, 2, 13, 31)   ───┼──► [Skip 4: Time Collapse]
-  │        MaxPool3d(2, 2)                                              │
-  ▼                                                                     │
-[3D Bottleneck] Conv3D(192->384)           --> (B, 384, 1, 7, 16)       │
-  │                                                                     │
-  ▼                                                                     │
-[Temporal Collapse] AdaptiveAvgPool3d((1, H, W))                        │
-  │ squeeze(2)                             --> (B, 384, 7, 16)          │
-  ▼                                                                     │
-[2D Decoder Stage 4] ConvTranspose2d + Cat(Skip 4) + CBAM Attention     │
-  ▼                                                                     │
-[2D Decoder Stage 3] ConvTranspose2d + Cat(Skip 3) + CBAM Attention     │
-  ▼                                                                     │
-[2D Decoder Stage 2] ConvTranspose2d + Cat(Skip 2) + CBAM Attention     │
-  ▼                                                                     │
-[2D Decoder Stage 1] ConvTranspose2d + Cat(Skip 1) + CBAM Attention     │
-  ▼                                                                     │
-[Output Conv2d 1x1] Conv2d(24 -> 15)       --> (B, 15, 101, 241)
+### Frontend installation
+```bash
+npm install
+npm run dev
 ```
 
-### Detailed Structural Components
+Frontend usually runs on:
+http://localhost:5173
 
-1. **3D Encoder (`ConvBlock3D`)**:
-   - Each encoder block consists of:
-     - $\text{Conv3D}(k=3, p=1) \to \text{GroupNorm} \to \text{ReLU} \to \text{Conv3D}(k=3, p=1) \to \text{GroupNorm} \to \text{ReLU} \to \text{Dropout3D}(0.15)$
-   - Uses `nn.GroupNorm` instead of `BatchNorm3d` because batch sizes during ocean inference and fine-tuning are small ($B=1$ or $2$), where Batch Normalization statistics destabilize.
-   - Downsampling is performed via `nn.MaxPool3d(kernel_size=2, stride=2)`, halving temporal, meridional, and zonal dimensions simultaneously.
-
-2. **Temporal Collapse Transition**:
-   - The spatiotemporal bottleneck passes through `nn.AdaptiveAvgPool3d((1, None, None)).squeeze(2)`, condensing the temporal dimension into an aggregated latent feature map while preserving spatial geometry.
-   - Encoder skip connections undergo a corresponding temporal collapse (`collapse_time(x) = x.mean(dim=2)`), transforming 3D feature representations into 2D spatial maps for decoder concatenation.
-
-3. **2D Decoder with CBAM (`ConvBlock2D` + `CBAM`)**:
-   - Upsampling is performed via `nn.ConvTranspose2d(stride=2, kernel_size=2)`.
-   - Feature channels from upsampling are concatenated with the time-averaged skip connections from the encoder.
-   - **CBAM (Convolutional Block Attention Module)**:
-     - **Channel Attention**: Uses parallel Adaptive Average Pooling and Adaptive Max Pooling, routed through a shared MLP with reduction ratio $r=8$, followed by a sigmoid gate. Highlights *which physical features* (salinity gradients vs wind shear) dominate the reconstruction.
-     - **Spatial Attention**: Gathers channel-wise average and max projections, concatenates them into a 2-channel map, applies a $7 \times 7$ 2D convolution, and applies a sigmoid gate. Focuses gradient updates on key hydrodynamic fronts (e.g., Somali Current upwelling, Sri Lanka Dome).
-
-4. **Normalization & Denormalization Pipeline**:
-   - Input normalization:
-     $$\mathbf{X}_{\text{norm}}^{(c)} = \frac{\mathbf{X}^{(c)} - \mu_{\text{input}}^{(c)}}{\sigma_{\text{input}}^{(c)}}, \quad c \in \{0, \dots, 6\}$$
-   - Missing/Land cells: Land pixels evaluate to `NaN` in raw satellite arrays. Matching training methodology, `np.nan_to_num(x_norm, nan=0.0)` is applied so land areas present a zero-centered input that does not perturb convolutional filters.
-   - Output denormalization:
-     $$\mathbf{Y}_{\text{pred}}^{(d)} = \mathbf{Y}_{\text{norm}}^{(d)} \cdot \sigma_{\text{target}}^{(d)} + \mu_{\text{target}}^{(d)}, \quad d \in \{0, \dots, 14\}$$
-   - All statistical tensors ($\mu_{\text{input}}, \sigma_{\text{input}}, \mu_{\text{target}}, \sigma_{\text{target}}$) are packaged directly inside the `.pt` checkpoint file, ensuring inference normalization matches training statistics.
-
----
-
-## 5. Multi-Satellite Data Ingestion Pipeline
-
-### Channel Order and Source Specifications
-
-| Channel | Variable | Physical Name | Units | Satellite Source / Product ID | Native Resolution | Latency |
-|---|---|---|---|---|---|---|
-| **0** | `sst` | Sea Surface Temperature | $^\circ\text{C}$ | CMEMS MetOffice OSTIA L4 NRT (`METOFFICE-GLO-SST-L4-NRT-OBS-SST-V2`) | $0.05^\circ$ daily | ~1 day |
-| **1** | `sss` | Sea Surface Salinity | $\text{PSU}$ | NASA RSS SMAP L3 8-day running mean (`SMAP_RSS_L3_SSS_SMI_8DAY-RUNNINGMEAN_V6`) | $0.25^\circ$ 8-day running | ~7 days |
-| **2** | `ssh` | Sea Surface Height Anomaly (SLA) | $\text{m}$ | CMEMS DUACS SLA L4 NRT (`cmems_obs-sl_glo_phy-ssh_nrt_demo-allsat-swos-l4-duacs-0.125deg_P1D-i`) | $0.125^\circ$ daily | ~2 days |
-| **3** | `u_current` | Zonal Total Surface Current | $\text{m/s}$ | NASA PO.DAAC OSCAR v2.0 NRT (`OSCAR_L4_OC_NRT_V2.0`) | $0.25^\circ$ daily | ~2 days |
-| **4** | `v_current` | Meridional Total Surface Current | $\text{m/s}$ | NASA PO.DAAC OSCAR v2.0 NRT (`OSCAR_L4_OC_NRT_V2.0`) | $0.25^\circ$ daily | ~2 days |
-| **5** | `u_wind` | Zonal 10m Neutral Wind | $\text{m/s}$ | CMEMS Blended Wind L4 NRT (`cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H`) | $0.125^\circ$ hourly | ~1 day |
-| **6** | `v_wind` | Meridional 10m Neutral Wind | $\text{m/s}$ | CMEMS Blended Wind L4 NRT (`cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H`) | $0.125^\circ$ hourly | ~1 day |
-
-### Geospatial Regridding Engine (`backend/regridder.py`)
-
-Each satellite instrument operates on its own projection and grid:
-- OSTIA: $0.05^\circ$ global grid
-- DUACS SLA & CMEMS Wind: $0.125^\circ$ global grid
-- SMAP & OSCAR: $0.25^\circ$ global grid (SMAP originally indexed $0^\circ \to 360^\circ$ longitude)
-
-`regridder.py` standardizes every incoming 2D slice onto the master model grid:
-- **Latitude**: $5.00^\circ\text{N} \to 30.00^\circ\text{N}$ at $0.25^\circ$ increments $\rightarrow$ exactly $101$ nodes.
-- **Longitude**: $45.00^\circ\text{E} \to 105.00^\circ\text{E}$ at $0.25^\circ$ increments $\rightarrow$ exactly $241$ nodes.
-- **Algorithm**: `scipy.interpolate.RegularGridInterpolator(method="linear")` with boundary repair via nearest-neighbor interpolation to prevent edge divergence.
-- Coordinate transformation: Automatically handles descending latitudes (inverts axes) and $0^\circ - 360^\circ$ longitude ranges (transforms via `(lon + 180) % 360 - 180`).
-
-### Robust Ingestion Engineering (`backend/sources/`)
-
-1. **Shared Date Window Alignment**:
-   - `fetch_all_channels` queries one shared 16-day calendar date list across all 5 sources concurrently using `asyncio.gather`.
-   - Each individual product handles its own publication latency internally without time-shifting the other channels, ensuring all 7 physical channels are aligned along the temporal axis.
-2. **Dynamic Catalog Discovery (`cmems_common.py`)**:
-   - To guard against Copernicus dataset deprecation, `open_cmems_dataset` tests candidate dataset IDs in priority order, falling back to a live catalog search (`copernicusmarine.describe(contains=[...])`) if candidate identifiers fail.
-3. **Bounded Nearest-Neighbor Selection**:
-   - Rather than using unbounded `.sel(time=..., method="nearest")` (which can mistakenly match data from weeks away during satellite dropouts), `select_nearest_with_tolerance` rejects matches outside a strict window (1–2 days). Missing observations are carried forward from the previous day.
-4. **Graceful Synthetic Fallback**:
-   - In offline test environments or when satellite service tokens are unconfigured, `inference.py` catches API timeouts (8s threshold) and falls back to a realistic physical ocean parameter generator based on North Indian Ocean climatology, allowing full end-to-end evaluation without active satellite subscriptions.
-
----
-
-## 6. Backend API Server Architecture (`backend/main.py`)
-
-The backend is built with FastAPI and runs on Uvicorn.
-
-### Lifespan Lifecycle
-```python
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    load_model() # Loads best_model_*.pt into GPU/CPU memory once at startup
-    yield
-    # Graceful cleanup on server shutdown
+### Backend installation
+```bash
+cd backend
+python -m venv venv
+# Windows PowerShell:
+# .\venv\Scripts\Activate.ps1
+# Linux / macOS:
+# source venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### Endpoints Specification
+### Required environment variables
+Create a `.env` file inside the `backend/` directory:
 
-#### 1. Liveness & Status
-- **`GET /api/v1/health`**
-  - Verifies whether the neural network is initialized in memory, checks active execution device (`cuda` or `cpu`), returns temporal window length ($16\text{ days}$), and verifies whether CMEMS credentials are configured.
-- **`GET /api/v1/data-status`**
-  - Reports configuration state and authentication requirements for each of the 5 data feeds (CMEMS SST, SMAP SSS, CMEMS SSH, OSCAR Currents, CMEMS Winds).
-
-#### 2. Model Inference
-- **`POST /api/v1/predict`**
-  - **Request Body (`PredictRequest`)**:
-    ```json
-    {
-      "latitude": 15.25,
-      "longitude": 70.50,
-      "datetime": "2026-09-25T12:00:00Z"
-    }
-    ```
-  - **Validation**:
-    - `latitude`: Constrained to $5.0^\circ\text{N} \le \text{lat} \le 30.0^\circ\text{N}$ (raises HTTP 422 if out of bounds).
-    - `longitude`: Constrained to $45.0^\circ\text{E} \le \text{lon} \le 105.0^\circ\text{E}$ (raises HTTP 422 if out of bounds).
-  - **Response Body (`PredictResponse`)**:
-    ```json
-    {
-      "latitude": 15.25,
-      "longitude": 70.50,
-      "lat_grid": 15.25,
-      "lon_grid": 70.50,
-      "datetime": "2026-09-25T12:00:00Z",
-      "depths_m": [0.0, 10.0, 20.0, 30.0, 50.0, 75.0, 100.0, 150.0, 200.0, 300.0, 400.0, 500.0, 700.0, 850.0, 1000.0],
-      "temperatures_degC": [28.45, 28.41, 28.32, 27.95, 24.12, 20.85, 17.65, 14.20, 12.10, 10.45, 9.12, 8.05, 6.75, 5.80, 4.95],
-      "data_sources": {
-        "sst": { "dataset": "CMEMS OSTIA SST L4 NRT" },
-        "sss": { "dataset": "NASA RSS SMAP L3 8-day running mean V6" },
-        "ssh": { "dataset": "CMEMS DUACS SLA L4 NRT" },
-        "currents": { "dataset": "NASA OSCAR v2.0 NRT via PO.DAAC" },
-        "winds": { "dataset": "CMEMS L4 NRT blended wind" }
-      },
-      "inference_time_ms": 112.4
-    }
-    ```
-
-#### 3. Diagnostic & Inspection
-- **`POST /api/v1/inspect-sources`** / **`GET /api/v1/inspect-sources`**
-  - Fetches the raw 16-day historical time series for all 7 physical variables at the clicked pixel without passing through the neural network. Used for sensor calibration and debugging.
-
----
-
-## 7. Frontend GIS Application Architecture
-
-The frontend is a single-page GIS interface inspired by Copernicus MyOcean Pro.
-
-### Core Visual Layers
-
-```
-Layer Hierarchy (Bottom to Top):
-  [Z: 0]  Leaflet Base Map (ArcGIS World Dark Gray Canvas)
-  [Z: 10] OceanThermalHeatmap (Canvas 600x250 with Bilinear Magma Interpolation)
-  [Z: 12] LandVectorMask (GeoJSON Land Polygonal Fill: #171c24, Stroke: #283345)
-  [Z: 15] Grid025Overlay (Canvas Overlay: 101x241 0.25° Grid Lines + Active Reticle)
-  [Z: 20] Interactive Click Probe Marker (Leaflet CircleMarker)
-  [Z: 1100] Floating UI (Header, Copernicus Layer Card, HUD, Toolbars)
-  [Z: 1150] OceanEmbedProbeCard (Dynamic Coordinates Anchored Popup)
+```env
+CMEMS_USERNAME=your_username
+CMEMS_PASSWORD=your_password
+EARTHDATA_USERNAME=your_username
+EARTHDATA_PASSWORD=your_password
+CORS_ORIGINS=["http://localhost:5173","http://localhost:3000"]
+LOG_LEVEL=INFO
 ```
 
-1. **`OceanThermalHeatmap`**:
-   - Renders a continuous thermal raster onto an offscreen $600 \times 250$ pixel HTML5 Canvas mapped to geographic bounds $[[5, 45], [30, 105]]$.
-   - Applies continuous **Copernicus Magma/Inferno** 8-stop color interpolation:
-     - $0.00$: Dark Violet/Black `rgb(15, 10, 40)` $\to 15^\circ\text{C}$ or deep ocean floor.
-     - $0.45$: Crimson Magenta `rgb(145, 38, 100)` $\to 22^\circ\text{C}$.
-     - $0.75$: Fiery Amber `rgb(242, 115, 50)` $\to 28^\circ\text{C}$.
-     - $1.00$: Radiant Sun Yellow `rgb(254, 250, 180)` $\to 32^\circ\text{C}+$.
-   - Converts the canvas buffer to a high-speed data URL (`canvas.toDataURL()`) mounted as an `L.imageOverlay` to minimize GPU texture thrashing.
+---
 
-2. **`LandVectorMask`**:
-   - Uses `topojson-client` and `d3-geo` to project Natural Earth $50\text{m}$ vector shorelines directly over the thermal canvas.
-   - Prevents thermal colors from bleeding across coastal boundaries (e.g., Gujarat, Mumbai, Kerala, Sri Lanka, and the Arabian Peninsula).
+## 10. Current Status and Caveats
 
-3. **`Grid025Overlay`**:
-   - Draws the $0.25^\circ \times 0.25^\circ$ numerical model grid dynamically on top of the viewport canvas.
-   - Highlights $1.0^\circ$ major boundaries and $5.0^\circ$ master lines with contextual coordinate labels.
-   - Projects a targeted bounding reticle and glowing border around the selected probe grid cell.
+This is a prototype and decision-support system rather than a production operational deployment.
 
-4. **`OceanEmbedProbeCard`**:
-   - Anchors directly adjacent to the user's clicked location via screen-to-container coordinate projection (`MapPositionTracker`).
-   - If the user clicks over land (evaluated using `isLandCoordinate`), the card adapts to display a "No Data / Ocean Only" inspection state matching Copernicus satellite telemetry dashboards.
-   - When an ocean coordinate is clicked, it exposes 4 analytical tabs:
-     1. **15-Depth Profile (Physics)**: Plots the full $T(z)$ curve from $0\text{ m}$ to $1000\text{ m}$. Renders the thermocline layer as an amber band, labels rapid $\Delta T$ drop-off regions, and displays min/max/average potential temperature alongside GLORYS12 numerical reference curves.
-     2. **Sonic Layer Depth (SLD) / Defense**: Evaluates sound propagation speed $C(z)$ using the **Mackenzie (1981)** nine-term acoustic equation:
-        $$C(T, S, D) = 1448.96 + 4.591T - 0.05304T^2 + 2.374 \times 10^{-4}T^3 + 1.340(S - 35) + 0.0163D$$
-        Locates the **Sonic Layer Depth (SLD)** (depth of maximum sound speed in the upper ocean). This identifies subsurface acoustic ducts and shadow zones, which are vital for Anti-Submarine Warfare (ASW) sonar planning.
-     3. **BOA-ARGO Float Benchmark**: Shows quantitative validation against in-situ float benchmarks (e.g., float `ARGO_INCOIS_2901428`), verifying that model predictions satisfy the competition objective ($\text{RMSE} < 0.5^\circ\text{C}$, $R^2 \ge 0.98$).
-     4. **5 Satellite Inputs**: Displays the 5 surface parameters driving the reconstruction at that location.
-     5. **Tropical Cyclone Heat Potential (TCHP)**: Integrates ocean heat energy from the surface down to the $26^\circ\text{C}$ isotherm:
-        $$\text{TCHP} = \rho C_p \int_{0}^{D_{26}} (T(z) - 26)\, dz \quad [\text{kJ/cm}^2]$$
-        Flags elevated oceanic heat support when $\text{TCHP}$ exceeds a contextual threshold; it is not a stand-alone cyclone-intensity forecast.
+The app is designed to be extensible and realistic:
+- the main app is intended for real model-based inference from surface satellite inputs
+- the TCHP and OTEC pages include specially designed mock or demo analytics for interaction and decision support
+- live backend code is structured to accept real CMEMS and Earthdata inputs
+- all the visual interfaces are built to simulate the scientific decision workflow of a real ocean monitoring platform
 
 ---
 
-## 8. Inter-File Connection & Component Dependency Matrix
+## 11. Credits
 
-| File Path | Role | Imported By / Triggered By | Imports / Connects To |
-|---|---|---|---|
-| `backend/main.py` | FastAPI HTTP Server & lifespan lifecycle | Uvicorn CLI runner | `backend/inference.py`, `backend/model_loader.py`, `backend/regridder.py` |
-| `backend/inference.py` | Inference orchestration pipeline | `backend/main.py` | `backend/model_loader.py`, `backend/regridder.py`, `backend/sources/__init__.py` |
-| `backend/model_loader.py` | Loads model checkpoint & normalization stats | `backend/main.py`, `backend/inference.py` | `backend/model_def.py` |
-| `backend/model_def.py` | PyTorch UNetOcean3D architecture with CBAM | `backend/model_loader.py` | PyTorch (`torch.nn`) |
-| `backend/regridder.py` | Bilinear spatial regridding to 0.25° NIO grid | `backend/inference.py`, `backend/sources/*.py` | `scipy.interpolate` |
-| `backend/sources/__init__.py` | Multi-source parallel fetch orchestrator | `backend/inference.py` | `cmems_sst.py`, `cmems_ssh.py`, `cmems_winds.py`, `oscar_currents.py`, `smap_sss.py`, `date_utils.py` |
-| `backend/sources/date_utils.py` | 16-day window calculation with product latencies | `backend/sources/__init__.py`, `sources/*.py` | Python `datetime` |
-| `backend/sources/cmems_common.py`| CMEMS auth, dynamic catalog discovery & tolerance | `cmems_sst.py`, `cmems_ssh.py`, `cmems_winds.py` | `copernicusmarine`, `xarray` |
-| `backend/sources/cmems_sst.py` | OSTIA SST satellite client | `backend/sources/__init__.py` | `cmems_common.py`, `regridder.py` |
-| `backend/sources/smap_sss.py` | NASA RSS SMAP SSS satellite client | `backend/sources/__init__.py` | `earthaccess`, `regridder.py` |
-| `backend/sources/cmems_ssh.py` | CMEMS DUACS SLA satellite client | `backend/sources/__init__.py` | `cmems_common.py`, `regridder.py` |
-| `backend/sources/oscar_currents.py`| NASA OSCAR v2.0 surface currents client | `backend/sources/__init__.py` | `earthaccess`, `regridder.py` |
-| `backend/sources/cmems_winds.py` | CMEMS L4 blended wind client | `backend/sources/__init__.py` | `cmems_common.py`, `regridder.py` |
-| `backend/data_download.py` | Standalone CLI batch data downloader | CLI / Data preparation pipeline | `copernicusmarine`, `earthaccess`, `xarray` |
-| `src/main.jsx` | React DOM initialization | `index.html` | `src/App.jsx`, `src/index.css` |
-| `src/App.jsx` | Main UI container: Map, Canvas, Probe Card | `src/main.jsx` | `src/apiClient.js`, `src/simulation.js`, `src/geoData.js`, `react-leaflet`, `leaflet` |
-| `src/apiClient.js` | Frontend API client (invokes `/api/v1/predict`) | `src/App.jsx` | Backend endpoint (`http://localhost:8000/api/v1`) |
-| `src/simulation.js` | Mackenzie acoustics, SLD, TCHP, fallback model | `src/App.jsx` | Standalone physics engine |
-| `src/geoData.js` | TopoJSON parsing & coordinate land check | `src/App.jsx` | `world-atlas`, `topojson-client`, `d3-geo` |
-| `src/landmask.js` | High-resolution polygonal mask for the NIO domain | `src/landCheck.js` (optional legacy check) | Standalone boundary coordinates |
+Smart India Hackathon 2026 — Problem Statement: PS-26066
+Team: Gradient Ascent
 
----
-
-## 9. Installation, Setup & Verification Guide
-
-### Prerequisites
-- **Node.js**: v18.0.0 or later
-- **Python**: v3.10 or later (Python 3.12 recommended)
-- **Git**
-
----
-
-### Step 1: Backend Setup & Environment Configuration
-
-1. Open a terminal and navigate to the `backend/` directory:
-   ```bash
-   cd backend
-   ```
-
-2. Create and activate a Python virtual environment:
-   ```bash
-   # Windows (PowerShell)
-   python -m venv venv
-   .\venv\Scripts\Activate.ps1
-
-   # Linux / macOS
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
-
-3. Install required dependencies:
-   ```bash
-   pip install --upgrade pip
-   pip install -r requirements.txt
-   ```
-   > **Note on GPU Acceleration**: To run inference on an NVIDIA CUDA-enabled GPU, install the official PyTorch CUDA build from [pytorch.org](https://pytorch.org/get-started/locally/).
-
-4. Configure satellite access credentials in `backend/.env`:
-   ```ini
-   APP_HOST=0.0.0.0
-   APP_PORT=8000
-   LOG_LEVEL=INFO
-   CORS_ORIGINS=["http://localhost:5173","http://localhost:3000"]
-
-   # Copernicus Marine Service (CMEMS) - Register for free at https://marine.copernicus.eu/
-   CMEMS_USERNAME=your_copernicus_username
-   CMEMS_PASSWORD=your_copernicus_password
-
-   # NASA Earthdata (PO.DAAC) - Register for free at https://urs.earthdata.nasa.gov/
-   EARTHDATA_USERNAME=your_earthdata_username
-   EARTHDATA_PASSWORD=your_earthdata_password
-   ```
-
-5. Verify that the trained checkpoint exists at `model/checkpoints/best_model_0.6787_epoch16.pt`.
-
-6. Start the backend service:
-   ```bash
-   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-   ```
-   Once started, the interactive OpenAPI documentation is accessible at `http://localhost:8000/docs`.
-
----
-
-### Step 2: Frontend Setup & Launch
-
-1. In a separate terminal, navigate to the project root directory:
-   ```bash
-   cd Gradient_Ascent_Prototype
-   ```
-
-2. Install Node dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Launch the Vite development server:
-   ```bash
-   npm run dev
-   ```
-
-4. Open your browser and navigate to `http://localhost:5173`.
-
----
-
-### Step 3: Verification & Operational Walkthrough
-
-1. **Verify Backend Health**:
-   Visit `http://localhost:8000/api/v1/health` in your browser. The response should show:
-   ```json
-   {
-     "status": "ok",
-     "model_loaded": true,
-     "device": "cuda:0",
-     "n_days_window": 16,
-     "cmems_credentials": "configured"
-   }
-   ```
-
-2. **Interactive Map Exploration**:
-   - The map loads centered over the North Indian Ocean ($17.0^\circ\text{N}, 75.0^\circ\text{E}$) with the dark ArcGIS base layer.
-   - The thermal overlay displays sea surface temperatures using the Magma color palette.
-   - Use the **Depth Selector** on the right side to inspect subsurface layers ($0\text{ m}, -50\text{ m}, -100\text{ m}, -200\text{ m}, -500\text{ m}, -1000\text{ m}$).
-   - Toggle the **0.25° Numerical Grid Mesh** using the toolbar button or adjust grid opacity using the slider.
-
-3. **Inspect Subsurface Profiles**:
-   - Click anywhere in open water (e.g., Arabian Sea at $15^\circ\text{N}, 70^\circ\text{E}$ or Bay of Bengal at $15^\circ\text{N}, 88^\circ\text{E}$).
-   - The **OceanEmbed Probe Card** will open next to your clicked point, trigger an API request to `POST /api/v1/predict`, and render the 15-depth vertical profile.
-   - Switch tabs to inspect **Sonic Layer Depth (SLD)**, **BOA-ARGO Float Benchmark**, and **5 Satellite Inputs**.
-   - Click on land (e.g., mainland India) to verify that the probe card switches to the "No Data / Ocean Only" inspection state.
-
----
-
-## 10. References & Standards
-
-1. **Copernicus Marine Service (CMEMS)**:
-   - Global High Resolution Sea Surface Temperature (OSTIA): `SST_GLO_SST_L4_NRT_OBSERVATIONS_010_001`
-   - Global Ocean Altimeter Satellite Sea Level Anomaly (DUACS): `SEALEVEL_GLO_PHY_L4_NRT_008_046`
-   - Global Blended Surface Wind Fields: `WIND_GLO_PHY_L4_NRT_012_004`
-2. **NASA PO.DAAC / Earthdata**:
-   - SMAP Sea Surface Salinity 8-Day Running Mean V6: `SMAP_RSS_L3_SSS_SMI_8DAY-RUNNINGMEAN_V6`
-   - Ocean Surface Current Analysis Real-time (OSCAR v2.0): `OSCAR_L4_OC_NRT_V2.0`
-3. **Acoustic Oceanography**:
-   - Mackenzie, K. V. (1981). *"Nine-term equation for sound speed in the oceans"*. The Journal of the Acoustical Society of America, 70(3), 807-812.
-4. **Attention Mechanisms**:
-   - Woo, S., Park, J., Lee, J. Y., & Kweon, I. S. (2018). *"CBAM: Convolutional Block Attention Module"*. Proceedings of the European Conference on Computer Vision (ECCV), 3-19.
-
----
-*Created for Smart India Hackathon 2026 · Team Gradient Ascent · PS-26066*
-
-## TCHP Intelligence prototype
-
-The frontend includes a dedicated `/tchp` dashboard for demonstration analysis
-of Tropical Cyclone Heat Potential across the Arabian Sea and Bay of Bengal.
-It is fully browser-side and uses deterministic mock data in
-`src/tchpMockData.js`; it does not require the backend, CMEMS credentials, or
-NASA Earthdata credentials. The dashboard includes region switching,
-forecaster/expert views, a TCHP map, profile and trend visualisations, and a
-demonstration cyclone corridor. TCHP is presented as an oceanic support
-diagnostic, not as a deterministic cyclone-intensity forecast. Production
-values can later replace the mock data through the OceanEmbed inference API.
+The project integrates ocean science, geospatial analytics, frontend dashboard design, and ML-driven climate / marine intelligence into a single prototype platform built for marine operational decision support.

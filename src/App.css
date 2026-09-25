@@ -1,1 +1,9 @@
 /* App-specific styles handled via Tailwind in index.css */
+
+/* Unified OceanEmbed mission-control surfaces */
+.bg-white\/95 { background: rgba(12,16,23,.9) !important; color: var(--text-primary) !important; }
+.border-gray-200\/80 { border-color: var(--panel-border) !important; }
+.text-gray-800 { color: var(--text-primary) !important; }
+.layer-selector .text-gray-900,.layer-selector .text-gray-700,.layer-selector .text-gray-600 { color: var(--text-secondary) !important; }
+.layer-selector .text-gray-500,.layer-selector .text-gray-400 { color: #7f96a4 !important; }
+

@@ -2,6 +2,34 @@ import React from 'react';
 import { Info } from 'lucide-react';
 import { otecTheme } from '../otec-theme';
 
+export function GlassCard({ children, className = '', title, style = {} }) {
+  return <section className={`glass-card ${className}`} style={style}>{title && <h3 className="glass-card-title">{title}</h3>}{children}</section>;
+}
+
+export function MetricReadout({ value, unit, label, className = '' }) {
+  return <span className={`metric-readout ${className}`} data-metric>{label && <small>{label}</small>}<strong>{value}</strong>{unit && <small>{unit}</small>}</span>;
+}
+
+export function TabGroup({ tabs, value, onChange, className = '' }) {
+  return <div className={`shared-tab-group ${className}`} role="tablist">{tabs.map(tab => { const label = typeof tab === 'string' ? tab : tab.label; const key = typeof tab === 'string' ? tab : tab.value; return <button key={key} role="tab" aria-selected={value === key} className={value === key ? 'active' : ''} onClick={() => onChange(key)}>{label}</button>; })}</div>;
+}
+
+export function SliderControl({ label, ...props }) {
+  return <label className="shared-slider"><span>{label}</span><input type="range" {...props} /></label>;
+}
+
+export function LegendGradientBar({ label, gradient = 'linear-gradient(90deg,#0f0a28,#301258,#5c166e,#912664,#c84146,#f27332,#fdb955,#fefab4)' }) {
+  return <div className="shared-legend">{label && <span>{label}</span>}<i style={{ background: gradient }} /></div>;
+}
+
+export function ExportButton({ children = 'Export', ...props }) {
+  return <button className="shared-export-button" {...props}>{children}</button>;
+}
+
+export function ToastNotification({ children, onClose }) {
+  return <div className="shared-toast" role="status">{children}{onClose && <button onClick={onClose} aria-label="Dismiss">×</button>}</div>;
+}
+
 // Wrapper for all charts/tables
 export function SectionCard({ children, title, subtitle }) {
   return (

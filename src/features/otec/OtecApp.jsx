@@ -10,6 +10,7 @@ import { DEPTH_PROFILE } from './mock-data/depth-profile';
 import { HISTORY_30DAY } from './mock-data/history-30day';
 import SiteExplorerTab from './components/SiteExplorerTab';
 import FutureSiteRankingTab from './components/FutureSiteRankingTab';
+import GlobalHeader from './components/GlobalHeader.jsx';
 
 export default function OtecApp() {
   const [activeTab, setActiveTab] = useState("Today's Operations");
@@ -72,7 +73,8 @@ export default function OtecApp() {
   }, [forecast7Days]);
 
   return (
-    <div style={{ height: '100vh', overflowY: 'auto', backgroundColor: otecTheme.colors.bg, color: otecTheme.colors.textMain, fontFamily: 'sans-serif' }}>
+    <div style={{ minHeight: '100vh', overflowY: 'auto', backgroundColor: 'var(--bg-base)', color: otecTheme.colors.textMain, fontFamily: 'var(--ui-font)' }}>
+      <GlobalHeader subLabel="AI Subsurface Ocean 3D Reconstruction" />
       {/* Top Header Bar */}
       <header style={{ 
         backgroundColor: otecTheme.colors.panel, 

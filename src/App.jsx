@@ -4,9 +4,8 @@ import L from 'leaflet';
 import {
   Plus, Search, Share2, Info, Download, Layers, Settings,
   MousePointer2, Upload, Thermometer, X, Eye, Shield, Droplets, Waves,
-  Wind, Navigation, AlertTriangle, Grid, Anchor
+  Wind, Navigation, AlertTriangle, Grid
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
 import {
   getMockTemperature,
   getFullOceanProfile,
@@ -14,7 +13,8 @@ import {
 } from './simulation';
 import { worldLandGeoJSON, isLandCoordinate } from './geoData';
 import { fetchInferencePrediction } from './apiClient';
-import TchpPage from './TchpPage.jsx';
+import GlobalHeader from './features/otec/components/GlobalHeader.jsx';
+import './App.css';
 
 // ─── Copernicus Magma/Inferno Continuous Palette ─────────────────────────────
 const MAGMA_STOPS = [
@@ -1068,7 +1068,7 @@ function OceanEmbedProbeCard({ probe, screenPos, depth, year, dayOfYear, forecas
 }
 
 // ─── Main Application Component ───────────────────────────────────────────────
-function OceanMapApp({ onNavigateToTchp }) {
+function OceanMapApp() {
   const [probe, setProbe] = useState({ lat: 14.5, lon: 70.0 });
   const [screenPos, setScreenPos] = useState({ x: 450, y: 220 });
   const [depth, setDepth] = useState(0);
@@ -1201,40 +1201,12 @@ function OceanMapApp({ onNavigateToTchp }) {
           COPERNICUS MYOCEAN PRO FLOATING UI
       ══════════════════════════════════════════ */}
 
-      {/* ── TOP HEADER BAR ── */}
-      <div className="absolute top-0 left-0 right-0 z-[1100] h-10 bg-[#0c1017]/90 backdrop-blur-md border-b border-white/[0.08] flex items-center px-4 gap-4">
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="w-5 h-5 rounded bg-gradient-to-br from-cyan-500 to-fuchsia-500 flex items-center justify-center shadow">
-            <Thermometer size={12} className="text-white" />
-          </div>
-          <span className="text-[12px] font-bold tracking-wider text-white uppercase">OceanEmbed</span>
-          <span className="text-[10px] text-gray-400 font-mono hidden sm:inline">| AI Subsurface Ocean 3D Reconstruction</span>
-        </div>
-        <div className="flex-1" />
-        <div className="flex items-center gap-3 text-[10px] text-gray-300 font-mono">
-          <span className="hidden md:inline">North Indian Ocean (5°N–30°N, 45°E–105°E)</span>
-          <span className="text-white/20 hidden md:inline">|</span>
-          <span className="text-cyan-400 font-medium">15 Depths (0–1000m)</span>
-          <span className="text-white/20">|</span>
-          <span className="text-amber-300/90 font-medium">SIH 2026 · PS-26066</span>
-          <span className="text-white/20">|</span>
-          <Link to="/otec" className="bg-[#2FB8C9]/20 hover:bg-[#2FB8C9]/40 border border-[#2FB8C9]/50 text-[#2FB8C9] px-2 py-0.5 rounded font-bold transition-colors flex items-center gap-1">
-            <Anchor size={10} />
-            OTEC Intelligence Platform
-          </Link>
-          <button
-            onClick={onNavigateToTchp}
-            className="ml-2 rounded border border-amber-400/40 bg-amber-400/10 px-2 py-1 text-[9px] font-bold text-amber-200 hover:bg-amber-400/20"
-          >
-            TCHP Intelligence
-          </button>
-        </div>
-      </div>
+      <GlobalHeader floating />
 
       {/* ── TOP-LEFT LAYER CARD (Exact Copernicus Style) ── */}
-      <div className="absolute top-14 left-4 z-[1100] w-72 bg-white/95 backdrop-blur-sm text-gray-800 rounded-xl shadow-2xl overflow-hidden border border-gray-100">
-        <div className="flex items-center border-b border-gray-200/80">
-          <button className="flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold text-cyan-700 border-b-2 border-cyan-600 bg-cyan-50/70">
+      <div className="layer-selector glass-card absolute top-[76px] left-4 z-[1100] w-72 bg-[#0c1017]/90 backdrop-blur-xl text-white rounded-xl shadow-2xl overflow-hidden border border-[#2FB8C9]/20">
+        <div className="flex items-center border-b border-white/10">
+          <button className="flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold text-[#2FB8C9] border-b-2 border-[#2FB8C9] bg-[#2FB8C9]/10">
             <Plus size={12} /> Add layer…
           </button>
           <div className="flex-1" />
@@ -1274,7 +1246,7 @@ function OceanMapApp({ onNavigateToTchp }) {
         </div>
 
         {/* Forecast Lead Selection Pill Buttons (Prominent & Larger) */}
-        <div className="px-3.5 py-2.5 bg-gradient-to-r from-cyan-50/90 to-blue-50/70 border-t border-b border-cyan-100 flex flex-col gap-2">
+        <div className="px-3.5 py-2.5 bg-[#0B1B2B]/80 border-t border-b border-white/10 flex flex-col gap-2">
           <div className="flex items-center justify-between text-[11px] font-bold text-gray-800">
             <span>Forecast Lead Mode:</span>
             {forecastDays > 0 && (
@@ -1289,8 +1261,8 @@ function OceanMapApp({ onNavigateToTchp }) {
                 key={fDays}
                 onClick={() => setForecastDays(fDays)}
                 className={`px-2.5 py-1 rounded-md text-[11px] font-mono font-bold transition-all shadow-sm ${forecastDays === fDays
-                    ? 'bg-cyan-600 text-white ring-2 ring-cyan-400/50 scale-105'
-                    : 'bg-white text-gray-700 hover:bg-cyan-100 border border-gray-200'
+                    ? 'bg-[#2FB8C9] text-[#02040a] ring-2 ring-[#2FB8C9]/40 scale-105'
+                    : 'bg-[#122A3E] text-gray-200 hover:bg-[#2FB8C9]/20 border border-white/10'
                   }`}
               >
                 {fDays === 0 ? 'Now' : `+${fDays}d`}
@@ -1300,7 +1272,7 @@ function OceanMapApp({ onNavigateToTchp }) {
         </div>
 
         {/* Grid Opacity Slider */}
-        <div className="px-3.5 py-2.5 flex items-center gap-2 border-t border-gray-100">
+        <div className="px-3.5 py-2.5 flex items-center gap-2 border-t border-white/10">
           <span className="text-[10px] text-gray-600 font-bold shrink-0">Grid Opacity</span>
           <input
             type="range"
@@ -1333,7 +1305,7 @@ function OceanMapApp({ onNavigateToTchp }) {
       )}
 
       {/* ── NORTH & SOUTH POLE BADGES ── */}
-      <div className="absolute top-12 left-1/2 -translate-x-1/2 z-[1100] pointer-events-none">
+      <div className="absolute top-[76px] left-1/2 -translate-x-1/2 z-[1100] pointer-events-none">
         <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-full px-3 py-0.5 text-[9px] font-bold tracking-widest text-white/70 uppercase shadow">
           North Pole
         </div>
@@ -1442,23 +1414,6 @@ function OceanMapApp({ onNavigateToTchp }) {
 
 
 export default function App() {
-  const [route, setRoute] = useState(window.location.pathname);
-
-  useEffect(() => {
-    const handlePopState = () => setRoute(window.location.pathname);
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
-
-  const navigate = (path) => {
-    window.history.pushState({}, '', path);
-    setRoute(path);
-  };
-
-  if (route === '/tchp' || route === '/tchp-intelligence') {
-    return <TchpPage onBack={() => navigate('/')} />;
-  }
-
-  return <OceanMapApp onNavigateToTchp={() => navigate('/tchp')} />;
+  return <OceanMapApp />;
 }
 
