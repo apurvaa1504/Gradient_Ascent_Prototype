@@ -1,8 +1,8 @@
-# OceanEmbed
+# Team Gradient Ascent Prototype
 
-OceanEmbed is a full-stack ocean intelligence prototype for the North Indian Ocean. It combines a FastAPI-based inference backend, a React + Leaflet GIS frontend, and a physics-aware deep learning workflow to reconstruct subsurface ocean temperature structure from multi-satellite surface observations.
+It is a full-stack ocean intelligence prototype for the North Indian Ocean. It combines a FastAPI-based inference backend, a React + Leaflet GIS frontend, and a physics-aware deep learning workflow to reconstruct subsurface ocean temperature structure from multi-satellite surface observations.
 
-The application is designed to solve a practical operational problem: surface satellites can see only the skin of the ocean, while the subsurface thermocline and deep thermal structure are often missing. OceanEmbed maps a 16-day sequence of atmospheric and ocean-surface variables into a 15-layer temperature reconstruction spanning 0 m to 1000 m over the North Indian Ocean domain.
+The application is designed to solve a practical operational problem: surface satellites can see only the skin of the ocean, while the subsurface thermocline and deep thermal structure are often missing. It maps a 16-day sequence of atmospheric and ocean-surface variables into a 15-layer temperature reconstruction spanning 0 m to 1000 m over the North Indian Ocean domain.
 
 The product currently includes three visible application experiences:
 
@@ -33,7 +33,7 @@ Each page is styled as a dark monitoring dashboard with marine scientific UI pat
 ### Functional goals
 - Inspect any ocean point in the study region
 - Observe reconstructed temperature profiles at multiple depths
-- Evaluate thermal gradient, thermocline changes, sound speed, TCHP, and marine heatwave context
+- Evaluate thermal gradient, thermocline changes, TCHP, and marine heatwave context
 - Show site viability for OTEC energy generation
 - Show tactical ocean heat diagnostics using TCHP-style decision cards
 
@@ -95,18 +95,18 @@ This page acts like a Copernicus-style scientific ocean dashboard. It is a map-f
 
 #### Top header
 At the top of the map, the dashboard shows:
-- OceanEmbed logo and title
-- scientific subtitle: “AI Subsurface Ocean 3D Reconstruction”
-- domain label: “North Indian Ocean (5°N–30°N, 45°E–105°E)”
-- depth indicator: “15 Depths (0–1000m)”
-- event label: “SIH 2026 · PS-26066”
+- Logo and title
+- scientific subtitle: "AI Subsurface Ocean 3D Reconstruction"
+- domain label: "North Indian Ocean (5°N–30°N, 45°E–105°E)"
+- depth indicator: "15 Depths (0–1000m)"
+- event label: "SIH 2026 · PS-26066"
 - OTEC Intelligence Platform button
 - TCHP Intelligence button
 
 #### Left panel: layer selector card
 A floating card in the upper-left side displays:
-- title: “Sea water potential temperature (thetao)”
-- depth metadata such as “Surface (0m)” or “100m depth”
+- title: "Sea water potential temperature (thetao)"
+- depth metadata such as "Surface (0m)" or "100m depth"
 - year and daily grid text
 - a gradient legend bar with magma/inferno colors from dark violet to golden yellow
 - forecast lead mode buttons:
@@ -167,7 +167,7 @@ A bottom-left HUD displays:
 - The app snaps coordinates to the grid if enabled
 - Hovering over the map updates the hovered cell and cell-level metadata
 - A glowing cyan marker shows the active selected point
-- If the selected point falls on land, the app shows a “No data” state instead of ocean metrics
+- If the selected point falls on land, the app shows a "No data" state instead of ocean metrics
 
 ### Thermal map styling
 The heatmap uses a Copernicus-like magma palette:
@@ -187,7 +187,7 @@ This palette is rendered on a canvas to display cold deep water in dark blue/vio
 When a valid ocean cell is clicked, a floating inspection card appears next to the clicked coordinate. This probe card contains these sections:
 
 #### Header
-- coordinate string like “70.000°E, 15.000°N”
+- coordinate string like "70.000°E, 15.000°N"
 - region badge: Bay of Bengal or Arabian Sea
 - close button
 
@@ -197,7 +197,7 @@ When a valid ocean cell is clicked, a floating inspection card appears next to t
 - optional +Nday lead label
 
 #### Tabs
-The card has four main tabs:
+The card has three main tabs:
 
 1. 15-Depth Profile
    - vertical temperature profile T(z)
@@ -208,20 +208,14 @@ The card has four main tabs:
    - average / minimum / maximum summary values
    - TCHP card below it
 
-2. Sonic / SLD
-   - Sonic Layer Depth (SLD) value in meters
-   - sound speed profile C(z)
-   - Mackenzie equation logic referenced in the code
-   - explanation that SLD is critical for naval sonar propagation and submarine shadow zones
-
-3. ARGO Benchmark
+2. ARGO Benchmark
    - model RMSE in °C
    - R² value
    - float ID reference
    - latency advantage concept
    - grid density comparison
 
-4. 5 Satellite Inputs
+3. 5 Satellite Inputs
    - SST
    - SSS
    - SSH anomaly
@@ -231,28 +225,28 @@ The card has four main tabs:
 ### Additional standout values in the probe card
 - Marine heatwave classification text
 - TCHP value in kJ/cm²
-- “High Cyclone Intensity Risk” or “Low / Moderate Risk” label
+- "High Cyclone Intensity Risk" or "Low / Moderate Risk" label
 - thermal profile summary data
 
 ### Land behavior
 If the user clicks a land coordinate:
 - the probe card does not show a temperature profile
-- it renders a land/no-data visual panel with “No data” placeholders
+- it renders a land/no-data visual panel with "No data" placeholders
 - the interface preserves the scientific dashboard feel without displaying false ocean values
 
 ---
 
 ## 4. TCHP Intelligence Page
 
-This page is accessible from the main app via the “TCHP Intelligence” button and is also used for the /tchp route.
+This page is accessible from the main app via the "TCHP Intelligence" button and is also used for the /tchp route.
 
 ### Purpose
 This page demonstrates Tropical Cyclone Heat Potential (TCHP) analysis across the North Indian Ocean. It presents a determination-support interface rather than a deterministic storm forecast.
 
 ### Header and layout
 The page includes:
-- brand lockup: “OCEANEMBED / SUBSURFACE INTELLIGENCE”
-- region breadcrumb: OceanEmbed / Ocean Heat / TCHP Intelligence
+- brand lockup: "SUBSURFACE INTELLIGENCE"
+- region breadcrumb: Ocean Heat / TCHP Intelligence
 - region selector dropdown
 - mode switch: Forecaster vs Expert
 - back button to return to the ocean map
@@ -305,7 +299,7 @@ This includes:
 - table of depth observations with temperature, uncertainty, climatology, and delta difference
 - copy CSV button for exporting the profile as CSV
 - confidence breakdown by SST, SSS, SSH, current, wind, historical support, regional support
-- surface signals used by OceanEmbed
+- surface signals used by the platform
 
 ### Corridor analysis panel
 This panel simulates a cyclone path and shows:
@@ -313,10 +307,10 @@ This panel simulates a cyclone path and shows:
 - TCHP, D26, SST, and confidence values for each point
 - route summary panel for the selected corridor segment
 - prototype-only disclaimer
-- “Generate corridor brief” button
+- "Generate corridor brief" button
 
 ### Methodology card
-The page includes a collapsible section titled “Methodology and interpretation” with:
+The page includes a collapsible section titled "Methodology and interpretation" with:
 - what TCHP means
 - why it matters for cyclone support
 - what it does not mean
@@ -346,11 +340,11 @@ The OTEC page evaluates whether a location is operationally viable for ocean the
 ### Main navigation tabs
 The page has three primary tabs:
 
-1. Today’s Operations
+1. Today's Operations
 2. Site Explorer
 3. Future Site Ranking
 
-### Page 1: Today’s Operations
+### Page 1: Today's Operations
 
 #### Top control row
 This section contains:
