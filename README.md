@@ -734,9 +734,3 @@ The app is designed to be extensible and realistic:
 
 ---
 
-## 11. Credits
-
-Smart India Hackathon 2026 — Problem Statement: PS-26066
-Team: Gradient Ascent
-
-The project integrates ocean science, geospatial analytics, frontend dashboard design, and ML-driven climate / marine intelligence into a single prototype platform built for marine operational decision support.
